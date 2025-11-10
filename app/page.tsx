@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { ChatThread } from './types';
 import { getThreads, deleteThread } from './lib/storage';
+import ThreadListItem from '@/app/components/ThreadListItem';
 
 export default function Home() {
   const [threads, setThreads] = useState<ChatThread[]>([]);
@@ -21,7 +22,7 @@ export default function Home() {
 
   return (
     <div className='h-full flex flex-col'>
-      <main className='flex-1 overflow-auto p-4'>
+      <main className='flex-1 overflow-auto px-4'>
         {!hasThreads ? (
           <div className='h-full flex items-center justify-center'>
             <div className='text-center text-sm text-black/60'>
@@ -31,18 +32,7 @@ export default function Home() {
         ) : (
           <ul className='space-y-2'>
             {threads.map((t) => (
-              <li key={t.id} className='border border-black/10 rounded-md p-3 flex items-center justify-between'>
-                <Link href={`/chat/${t.id}`} className='min-w-0 flex-1'>
-                  <div className='truncate text-sm font-medium'>{t.title}</div>
-                  <div className='text-xs text-black/50 mt-1'>{new Date(t.updatedAt).toLocaleString()}</div>
-                </Link>
-                <button
-                  className='ml-3 text-xs px-2 py-1 rounded border border-black/10 hover:bg-black/5'
-                  onClick={() => handleDelete(t.id)}
-                >
-                  삭제
-                </button>
-              </li>
+              <ThreadListItem key={t.id} id={t.id} title={t.title} updatedAt={t.updatedAt} onDelete={handleDelete} />
             ))}
           </ul>
         )}
