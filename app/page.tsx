@@ -3,8 +3,8 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { ChatThread } from './types';
-import { getThreads, deleteThread } from './lib/storage';
-import ThreadListItem from '@/app/components/ThreadListItem';
+import { getThreads, deleteThread } from './_lib/storage';
+import ThreadListItem from '@/app/_components/ThreadListItem';
 
 export default function Home() {
   const [threads, setThreads] = useState<ChatThread[]>([]);

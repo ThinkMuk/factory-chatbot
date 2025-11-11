@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { getThread } from "@/app/lib/storage";
+import { getThread } from "@/app/_lib/storage";
 
 export default function Header() {
   const router = useRouter();
