@@ -17,9 +17,9 @@ export default function Header() {
 
   const title = useMemo(() => {
     if (!pathname) return "Factory Chatbot";
-    if (pathname === "/chat") return "새 채팅";
     if (pathname.startsWith("/chat/")) {
       const id = pathname.split("/")[2];
+      if (id === "new") return "새 채팅";
       const thread = id ? getThread(id) : undefined;
       return thread?.title ?? "채팅";
     }

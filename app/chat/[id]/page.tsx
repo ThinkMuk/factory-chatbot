@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ChatMessage, ChatThread } from "@/app/types";
-import { appendMessage, getThread } from "@/app/lib/storage";
-import { mockAssistantReply } from "@/app/mock";
+import { appendMessage, getThread, upsertThread } from "@/app/lib/storage";
+import { mockAssistantReply, mockCreateThreadFromFirstMessage } from "@/app/mock";
 
 export default function ChatDetailPage() {
   const params = useParams<{ id: string }>();
@@ -13,10 +13,13 @@ export default function ChatDetailPage() {
   const [input, setInput] = useState("");
   const listRef = useRef<HTMLDivElement | null>(null);
 
+  // id가 'new'인 경우 스레드가 없는 상태로 시작
+  const isNewChat = params?.id === "new";
+
   useEffect(() => {
-    if (!params?.id) return;
+    if (!params?.id || isNewChat) return;
     setThread(getThread(params.id));
-  }, [params?.id]);
+  }, [params?.id, isNewChat]);
 
   const messages = useMemo(() => thread?.messages ?? [], [thread]);
 
@@ -25,9 +28,21 @@ export default function ChatDetailPage() {
   }, [messages.length]);
 
   const sendUserMessage = () => {
-    if (!thread || !params?.id) return;
     const content = input.trim();
     if (!content) return;
+
+    // 새 채팅인 경우: 첫 메시지로 스레드 생성
+    if (isNewChat) {
+      const newThread: ChatThread = mockCreateThreadFromFirstMessage(content);
+      setThread(newThread);
+      setInput("");
+      upsertThread(newThread);
+      router.replace(`/chat/${newThread.id}`);
+      return;
+    }
+
+    // 기존 스레드에 메시지 추가
+    if (!thread || !params?.id) return;
     const updated = appendMessage(params.id, { role: "user", content });
     setThread(updated);
     setInput("");
@@ -40,7 +55,8 @@ export default function ChatDetailPage() {
     }, 400);
   };
 
-  if (!thread) {
+  // 새 채팅이 아닌데 스레드가 없는 경우에만 에러 표시
+  if (!isNewChat && !thread) {
     return (
       <div className="h-full flex flex-col">
         <main className="flex-1 p-4 flex items-center justify-center text-sm text-black/60">존재하지 않는 대화입니다.</main>
