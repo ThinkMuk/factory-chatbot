@@ -38,8 +38,8 @@ export default function Home() {
         )}
       </main>
       <Link
-        href='/chat'
-        className='absolute bottom-20 right-4 w-[55px] h-[55px] rounded-full bg-[#194268] text-white flex items-center justify-center text-2xl'
+        href='/chat/new'
+        className='absolute bottom-20 left-4 w-[50px] h-[50px] rounded-full bg-[#194268] text-white flex items-center justify-center text-2xl'
       >
         +
       </Link>
