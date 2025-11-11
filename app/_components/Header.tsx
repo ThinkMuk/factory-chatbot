@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { getThread } from "@/app/_lib/storage";
+import { Undo2 } from "lucide-react";
 
 export default function Header() {
   const router = useRouter();
@@ -30,7 +31,9 @@ export default function Header() {
     <header className='h-12 flex items-center bg-[#323233] justify-between border-b border-black/10 px-4'>
       <div className='w-10'>
         {canGoBack ? (
-          <button className='text-sm text-white' onClick={() => router.back()}>←</button>
+          <button className='text-sm text-white cursor-pointer' onClick={() => router.back()}>
+            <Undo2 className='w-[18px] h-[18px]' />
+          </button>
         ) : null}
       </div>
       <h1 className='text-base text-white font-semibold truncate max-w-[220px]'>{title}</h1>
