@@ -80,9 +80,9 @@ export default function ChatDetailPage() {
         {/* visualization placeholder */}
         {/* 가능하면 차트나 그래프로 해당 내용을 시각화하여 표시 */}
       </div>
-      <footer className='border-t border-black/10 p-2'>
+      <footer className='p-2'>
         <div className='flex gap-2'>
-          <input
+          <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
@@ -94,10 +94,13 @@ export default function ChatDetailPage() {
               }
             }}
             placeholder='메시지를 입력하세요'
-            className='flex-1 border border-black/10 rounded-md px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/20'
+            className='flex-1 h-[110px] border bg-[#FAFBFD] border-[#DCDCDC] rounded-2xl p-3 text-sm outline-none focus:ring-1 focus:ring-[#d0cfcf] resize-none'
           />
-          <button onClick={sendUserMessage} className='h-10 px-4 rounded-md bg-black text-white text-sm'>
-            보내기
+          <button
+            onClick={sendUserMessage}
+            className='h-[110px] px-4 rounded-2xl bg-[#194268] text-white cursor-pointer text-base font-bold hover:bg-[#103453] transition-colors duration-200'
+          >
+            전송
           </button>
         </div>
       </footer>
