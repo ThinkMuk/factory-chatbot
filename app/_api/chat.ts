@@ -15,7 +15,7 @@ type MinimalSendPayload = {
 };
 
 //새로운 채팅방 만들기
-//{roomId, roomName, answerId, answer} 형식으로 리턴
+//{roomId, roomName, userChatId, llmChatId, answer} 형식으로 리턴
 export async function createChatRoom(question: string): Promise<CreateChatRoomResponse> {
   const sanitized = question.trim();
   if (!sanitized) {
@@ -37,7 +37,7 @@ export async function createChatRoom(question: string): Promise<CreateChatRoomRe
 }
 
 //기존 채팅방에 메세지 전송
-//{roomId, answerId, answer} 형식으로 리턴
+//{roomId, userChatId, llmChatId, answer} 형식으로 리턴
 export async function sendMessage(roomId: string, question: string): Promise<SendMessageResponse> {
   const sanitized = question.trim();
   if (!roomId) {
@@ -51,7 +51,7 @@ export async function sendMessage(roomId: string, question: string): Promise<Sen
     question: sanitized,
   };
   const raw = await requestWithRetry<string>(
-    "/v1/chat",
+    "/v2/chat",
     {
       method: "POST",
       headers: buildHeaders(),
@@ -77,54 +77,58 @@ export async function deleteChatRoom(roomId: string): Promise<void> {
 
 //채팅방 생성 응답이 올바른 형식인지 확인
 function validateCreateChatRoomResponse(data: CreateChatRoomResponse) {
-  if (!data || !data.roomId || !data.roomName || !data.answerId || typeof data.answer !== "string") {
+  if (!data || !data.roomId || !data.roomName || !data.userChatId || !data.llmChatId || typeof data.answer !== "string") {
     throw new Error("채팅방 생성 응답 형식이 올바르지 않습니다.");
   }
 }
 
 //메세지 전송 응답이 올바른 형식인지 확인
 function validateSendMessageResponse(data: SendMessageResponse) {
-  if (!data || !data.roomId || !data.answerId || typeof data.answer !== "string") {
+  if (!data || !data.roomId || !data.userChatId || !data.llmChatId || typeof data.answer !== "string") {
     throw new Error("메시지 응답 형식이 올바르지 않습니다.");
   }
 }
 
 function parseCreateChatRoomResponse(raw: string): CreateChatRoomResponse {
-  const parsed = JSON.parse(normalizeRoomIdToken(raw)) as CreateChatRoomResponse;
+  const parsed = JSON.parse(normalizeIdTokens(raw)) as CreateChatRoomResponse;
   return {
     ...parsed,
-    roomId: normalizeRoomIdValue(parsed.roomId),
+    roomId: normalizeIdValue(parsed.roomId),
+    userChatId: normalizeIdValue(parsed.userChatId),
+    llmChatId: normalizeIdValue(parsed.llmChatId),
   };
 }
 
 function parseSendMessageResponse(raw: string): SendMessageResponse {
-  const parsed = JSON.parse(normalizeRoomIdToken(raw)) as SendMessageResponse;
+  const parsed = JSON.parse(normalizeIdTokens(raw)) as SendMessageResponse;
   return {
     ...parsed,
-    roomId: normalizeRoomIdValue(parsed.roomId),
+    roomId: normalizeIdValue(parsed.roomId),
+    userChatId: normalizeIdValue(parsed.userChatId),
+    llmChatId: normalizeIdValue(parsed.llmChatId),
   };
 }
 
-function normalizeRoomIdToken(raw: string): string {
-  return raw.replace(/("roomId"\s*:\s*)(\d+)/g, (_match, prefix, digits) => `${prefix}"${digits}"`);
+function normalizeIdTokens(raw: string): string {
+  return raw.replace(/("(?:roomId|userChatId|llmChatId)"\s*:\s*)(\d+)/g, (_match, prefix, digits) => `${prefix}"${digits}"`);
 }
 
-function normalizeRoomIdValue(roomId: unknown): string {
-  if (typeof roomId === "bigint") {
-    return roomId.toString();
+function normalizeIdValue(value: unknown): string {
+  if (typeof value === "bigint") {
+    return value.toString();
   }
-  if (typeof roomId === "string") {
+  if (typeof value === "string") {
     try {
-      return BigInt(roomId).toString();
+      return BigInt(value).toString();
     } catch {
-      return roomId;
+      return value;
     }
   }
-  if (typeof roomId === "number") {
+  if (typeof value === "number") {
     try {
-      return BigInt(roomId).toString();
+      return BigInt(value).toString();
     } catch {
-      return String(roomId);
+      return String(value);
     }
   }
   return "";
