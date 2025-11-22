@@ -23,7 +23,7 @@ export async function createChatRoom(question: string): Promise<CreateChatRoomRe
   }
   const payload: MinimalCreatePayload = { question: sanitized };
   const raw = await requestWithRetry<string>(
-    "/v1/chat/room/create",
+    "/v2/chat/room/create",
     {
       method: "POST",
       headers: buildHeaders(),
