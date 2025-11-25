@@ -1,7 +1,7 @@
 import { ChatApiError, buildErrorMessage, normalizeError } from "./errors";
 import { delay } from "./utils";
 
-const DEFAULT_TIMEOUT_MS = 15000;
+const DEFAULT_TIMEOUT_MS = 60000; // 60초 (AI 응답 생성을 위해 증가)
 const DEFAULT_RETRY_COUNT = 2;
 
 export type RequestOptions = {
@@ -21,10 +21,11 @@ export async function requestWithRetry<T>(path: string, init: RequestInit, optio
     try {
       return await fetchWithTimeout<T>(`${baseUrl}${path}`, init, timeoutMs, responseType);
     } catch (error) {
-      lastError = error;
-      if (attempt === retries) {
-        throw normalizeError(lastError);
+      const canRetry = attempt < retries && isRetryableError(error);
+      if (!canRetry) {
+        throw normalizeError(error);
       }
+      lastError = error;
       const backoffMs = Math.pow(2, attempt) * 500;
       await delay(backoffMs);
       attempt += 1;
@@ -79,5 +80,23 @@ export function getApiBaseUrl(): string {
     throw new Error("NEXT_PUBLIC_API_BASE_URL 환경 변수가 설정되지 않았습니다.");
   }
   return base;
+}
+
+function isRetryableError(error: unknown): boolean {
+  if (isTimeoutError(error)) {
+    return false;
+  }
+  if (error instanceof ChatApiError) {
+    return error.status === 502 || error.status === 503;
+  }
+  if (error instanceof Error) {
+    const lowerMessage = error.message.toLowerCase();
+    return lowerMessage.includes("failed to fetch") || lowerMessage.includes("network error");
+  }
+  return false;
+}
+
+function isTimeoutError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes("시간 초과");
 }
 
