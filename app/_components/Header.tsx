@@ -9,6 +9,7 @@ export default function Header() {
   const router = useRouter();
   const pathname = usePathname();
   const [canGoBack, setCanGoBack] = useState(false);
+  const [hasMounted, setHasMounted] = useState(false);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -16,16 +17,22 @@ export default function Header() {
     }
   }, [pathname]);
 
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
+
   const title = useMemo(() => {
     if (!pathname) return "Factory Chatbot";
     if (pathname.startsWith("/chat/")) {
       const id = pathname.split("/")[2];
       if (id === "new") return "새 채팅";
+      // Defer localStorage access until after hydration to avoid SSR mismatch
+      if (!hasMounted) return "채팅";
       const thread = id ? getThread(id) : undefined;
       return thread?.title ?? "채팅";
     }
     return "Factory Chatbot";
-  }, [pathname]);
+  }, [pathname, hasMounted]);
 
   return (
     <header className='h-12 flex items-center bg-[#323233] justify-between border-b border-black/10 px-4'>
