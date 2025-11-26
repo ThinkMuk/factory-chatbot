@@ -1,6 +1,7 @@
 "use client";
 
-import { ChatThread, ChatMessage, NewThreadPayload } from "@/app/types";
+import { loadChatRooms, saveChatRooms } from '@/app/_lib/chatRoomsStorage';
+import { ChatRoom, ChatThread, ChatMessage, NewThreadPayload } from '@/app/types';
 
 const STORAGE_KEY = "factory-chatbot.threads";
 
@@ -70,6 +71,25 @@ export function appendMessage(
   return updated;
 }
 
+export function replaceMessageId(threadId: string, oldId: string, newId: string): ChatThread | undefined {
+  if (!newId) return undefined;
+  const threads = getThreads();
+  const threadIndex = threads.findIndex((t) => t.id === threadId);
+  if (threadIndex === -1) return undefined;
+  const messageIndex = threads[threadIndex].messages.findIndex((m) => m.id === oldId);
+  if (messageIndex === -1) return undefined;
+  const messages = threads[threadIndex].messages.map((message, idx) =>
+    idx === messageIndex ? { ...message, id: newId } : message
+  );
+  const updated: ChatThread = {
+    ...threads[threadIndex],
+    messages,
+  };
+  threads[threadIndex] = updated;
+  saveThreads(threads);
+  return updated;
+}
+
 export function upsertThread(thread: ChatThread) {
   const threads = getThreads();
   const idx = threads.findIndex((t) => t.id === thread.id);
@@ -79,6 +99,14 @@ export function upsertThread(thread: ChatThread) {
     threads[idx] = thread;
   }
   saveThreads(threads);
+}
+
+type MinimalChatRoom = Pick<ChatRoom, 'roomId' | 'roomName' | 'date'>;
+
+export function addToChatRoomList(newRoom: MinimalChatRoom) {
+  const existing = loadChatRooms();
+  const next = [newRoom, ...existing.filter((room) => room.roomId !== newRoom.roomId)];
+  saveChatRooms(next);
 }
 
 

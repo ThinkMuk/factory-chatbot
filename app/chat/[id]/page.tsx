@@ -14,6 +14,7 @@ export default function ChatDetailPage() {
   const [input, setInput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [pendingMessage, setPendingMessage] = useState<string>('');
+  const [streamingAnswer, setStreamingAnswer] = useState('');
   const listRef = useRef<HTMLDivElement | null>(null);
   const pendingMessageIdRef = useRef(0);
 
@@ -33,13 +34,19 @@ export default function ChatDetailPage() {
   const handleNewChatCreation = async (content: string) => {
     setIsProcessing(true);
     setPendingMessage(content);
+    setStreamingAnswer('');
     setInput('');
 
-    const result = await createNewChatWithMessage(content);
+    const result = await createNewChatWithMessage(content, {
+      onAnswerChunk: ({ accumulated }) => {
+        setStreamingAnswer(accumulated);
+      },
+    });
 
     if (result.success && result.thread) {
       setThread(result.thread);
       setPendingMessage('');
+      setStreamingAnswer('');
       router.replace(`/chat/${result.thread.id}`);
       setIsProcessing(false);
       return;
@@ -50,6 +57,7 @@ export default function ChatDetailPage() {
       const shouldRetry = window.confirm('응답 시간이 초과되었습니다. 다시 시도하시겠습니까?');
       if (shouldRetry) {
         setPendingMessage('');
+        setStreamingAnswer('');
         setIsProcessing(false);
         setInput(content); // 원본 내용 복원
         setTimeout(() => sendUserMessage(), 0);
@@ -60,6 +68,7 @@ export default function ChatDetailPage() {
     }
 
     setPendingMessage('');
+    setStreamingAnswer('');
     setIsProcessing(false);
   };
 
@@ -126,7 +135,8 @@ export default function ChatDetailPage() {
           )
         )}
         {pendingMessage && <UserMessageBubble content={pendingMessage} />}
-        {isProcessing && <AssistantMessageBubble isLoading={true} />}
+        {streamingAnswer && <AssistantMessageBubble content={streamingAnswer} />}
+        {isProcessing && !streamingAnswer && <AssistantMessageBubble isLoading={true} />}
         {/* visualization placeholder */}
         {/* 가능하면 차트나 그래프로 해당 내용을 시각화하여 표시 */}
       </div>
