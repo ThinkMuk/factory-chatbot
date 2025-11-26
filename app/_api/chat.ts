@@ -17,7 +17,7 @@ type MinimalSendPayload = {
   question: string;
 };
 
-type CreateChatRoomOptions = {
+type AnswerStreamOptions = {
   onAnswerChunk?: (payload: { chunk: string; accumulated: string }) => void;
 };
 
@@ -25,10 +25,7 @@ const CREATE_CHAT_STREAM_TIMEOUT_MS = DEFAULT_TIMEOUT_MS;
 
 //새로운 채팅방 만들기
 //{roomId, roomName, userChatId, llmChatId, answer} 형식으로 리턴
-export async function createChatRoom(
-  question: string,
-  options: CreateChatRoomOptions = {}
-): Promise<CreateChatRoomResponse> {
+export async function createChatRoom(question: string, options: AnswerStreamOptions = {}): Promise<CreateChatRoomResponse> {
   const sanitized = question.trim();
   if (!sanitized) {
     throw new Error('질문을 입력해 주세요.');
@@ -57,7 +54,11 @@ export async function createChatRoom(
 
 //기존 채팅방에 메세지 전송
 //{roomId, userChatId, llmChatId, answer} 형식으로 리턴
-export async function sendMessage(roomId: string, question: string): Promise<SendMessageResponse> {
+export async function sendMessage(
+  roomId: string,
+  question: string,
+  options: AnswerStreamOptions = {}
+): Promise<SendMessageResponse> {
   const sanitized = question.trim();
   if (!roomId) {
     throw new Error('채팅방 정보가 없습니다.');
@@ -69,18 +70,25 @@ export async function sendMessage(roomId: string, question: string): Promise<Sen
     roomId,
     question: sanitized,
   };
-  const raw = await requestWithRetry<string>(
-    '/v2/chat',
-    {
-      method: 'POST',
-      headers: buildHeaders(),
-      body: JSON.stringify(payload),
-    },
-    { responseType: 'text' }
-  );
-  const data = parseSendMessageResponse(raw);
-  validateSendMessageResponse(data);
-  return data;
+  let attempt = 0;
+  let lastError: unknown;
+  while (attempt <= DEFAULT_RETRY_COUNT) {
+    try {
+      const data = await streamSendMessageRequest(payload, options);
+      validateSendMessageResponse(data);
+      return data;
+    } catch (error) {
+      lastError = error;
+      const canRetry = attempt < DEFAULT_RETRY_COUNT && isRetryableError(error);
+      if (!canRetry) {
+        throw normalizeError(error);
+      }
+      const backoffMs = Math.pow(2, attempt) * 500;
+      await delay(backoffMs);
+      attempt += 1;
+    }
+  }
+  throw normalizeError(lastError);
 }
 
 export async function deleteChatRoom(roomId: string): Promise<void> {
@@ -115,39 +123,32 @@ function validateSendMessageResponse(data: SendMessageResponse) {
   }
 }
 
-function parseSendMessageResponse(raw: string): SendMessageResponse {
-  const parsed = JSON.parse(normalizeIdTokens(raw)) as SendMessageResponse;
-  return {
-    ...parsed,
-    roomId: normalizeIdValue(parsed.roomId),
-    userChatId: normalizeIdValue(parsed.userChatId),
-    llmChatId: normalizeIdValue(parsed.llmChatId),
-  };
-}
-
 function normalizeIdTokens(raw: string): string {
-  return raw.replace(/("(?:roomId|userChatId|llmChatId)"\s*:\s*)(\d+)/g, (_match, prefix, digits) => `${prefix}"${digits}"`);
+  return raw.replace(
+    /("(?:roomId|userChatId|llmChatId)"\s*:\s*)(\d+)/g,
+    (_match, prefix, digits) => `${prefix}"${digits}"`
+  );
 }
 
 function normalizeIdValue(value: unknown): string {
-  if (typeof value === "bigint") {
+  if (typeof value === 'bigint') {
     return value.toString();
   }
-  if (typeof value === "string") {
+  if (typeof value === 'string') {
     try {
       return BigInt(value).toString();
     } catch {
       return value;
     }
   }
-  if (typeof value === "number") {
+  if (typeof value === 'number') {
     try {
       return BigInt(value).toString();
     } catch {
       return String(value);
     }
   }
-  return "";
+  return '';
 }
 
 type CreateChatRoomStreamAccumulator = {
@@ -160,7 +161,7 @@ type CreateChatRoomStreamAccumulator = {
 
 async function streamCreateChatRoomRequest(
   payload: MinimalCreatePayload,
-  options: CreateChatRoomOptions = {}
+  options: AnswerStreamOptions = {}
 ): Promise<CreateChatRoomResponse> {
   const baseUrl = getApiBaseUrl();
   const url = `${baseUrl}/v1/chat/room/create/stream`;
@@ -256,7 +257,7 @@ function extractNextSseEvent(buffer: string): { event: string; remainder: string
 function processSseEventChunk(
   rawChunk: string,
   accumulator: CreateChatRoomStreamAccumulator,
-  options: CreateChatRoomOptions
+  options: AnswerStreamOptions
 ) {
   const payloadText = extractPayloadFromSseChunk(rawChunk);
   if (!payloadText || payloadText === '[DONE]') {
@@ -312,6 +313,134 @@ function finalizeCreateChatRoomResponse(accumulator: CreateChatRoomStreamAccumul
   return {
     roomId: accumulator.roomId ?? '',
     roomName: accumulator.roomName ?? '',
+    userChatId: accumulator.userChatId ?? '',
+    llmChatId: accumulator.llmChatId ?? '',
+    answer: accumulator.answer,
+  };
+}
+
+type SendMessageStreamAccumulator = {
+  roomId?: string;
+  userChatId?: string;
+  llmChatId?: string;
+  answer: string;
+};
+
+async function streamSendMessageRequest(
+  payload: MinimalSendPayload,
+  options: AnswerStreamOptions = {}
+): Promise<SendMessageResponse> {
+  const baseUrl = getApiBaseUrl();
+  const url = `${baseUrl}/v1/chat/stream`;
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : undefined;
+  const timerId = controller ? setTimeout(() => controller.abort(), CREATE_CHAT_STREAM_TIMEOUT_MS) : undefined;
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        ...buildHeaders(),
+        Accept: 'text/event-stream',
+      },
+      body: JSON.stringify(payload),
+      signal: controller?.signal,
+      cache: 'no-store',
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      const message = buildErrorMessage(text, response.status, response.statusText);
+      throw new ChatApiError(message, response.status);
+    }
+    if (!response.body) {
+      throw new Error('스트리밍 응답을 초기화할 수 없습니다.');
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    const accumulator: SendMessageStreamAccumulator = {
+      answer: '',
+    };
+    let buffer = '';
+    while (true) {
+      const { value, done } = await reader.read();
+      if (value) {
+        buffer += decoder.decode(value, { stream: true });
+      }
+      let nextEvent = extractNextSseEvent(buffer);
+      while (nextEvent) {
+        processSendSseEventChunk(nextEvent.event, accumulator, options);
+        buffer = nextEvent.remainder;
+        nextEvent = extractNextSseEvent(buffer);
+      }
+      if (done) {
+        buffer += decoder.decode();
+        nextEvent = extractNextSseEvent(buffer);
+        while (nextEvent) {
+          processSendSseEventChunk(nextEvent.event, accumulator, options);
+          buffer = nextEvent.remainder;
+          nextEvent = extractNextSseEvent(buffer);
+        }
+        if (buffer.trim()) {
+          processSendSseEventChunk(buffer, accumulator, options);
+        }
+        break;
+      }
+    }
+    return finalizeSendMessageResponse(accumulator);
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error('요청 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.');
+    }
+    throw error;
+  } finally {
+    if (timerId) {
+      clearTimeout(timerId);
+    }
+  }
+}
+
+function processSendSseEventChunk(
+  rawChunk: string,
+  accumulator: SendMessageStreamAccumulator,
+  options: AnswerStreamOptions
+) {
+  const payloadText = extractPayloadFromSseChunk(rawChunk);
+  if (!payloadText || payloadText === '[DONE]') {
+    return;
+  }
+  let parsed: Partial<SendMessageResponse>;
+  try {
+    parsed = JSON.parse(normalizeIdTokens(payloadText)) as Partial<SendMessageResponse>;
+  } catch {
+    throw new Error('SSE 응답을 파싱하지 못했습니다.');
+  }
+  const chunk = mergeSendChunkIntoAccumulator(parsed, accumulator);
+  if (chunk && options.onAnswerChunk) {
+    options.onAnswerChunk({ chunk, accumulated: accumulator.answer });
+  }
+}
+
+function mergeSendChunkIntoAccumulator(
+  payload: Partial<SendMessageResponse>,
+  accumulator: SendMessageStreamAccumulator
+) {
+  if (payload.roomId) {
+    accumulator.roomId = normalizeIdValue(payload.roomId);
+  }
+  if (payload.userChatId) {
+    accumulator.userChatId = normalizeIdValue(payload.userChatId);
+  }
+  if (payload.llmChatId) {
+    accumulator.llmChatId = normalizeIdValue(payload.llmChatId);
+  }
+  if (typeof payload.answer === 'string') {
+    accumulator.answer += payload.answer;
+    return payload.answer;
+  }
+  return undefined;
+}
+
+function finalizeSendMessageResponse(accumulator: SendMessageStreamAccumulator): SendMessageResponse {
+  return {
+    roomId: accumulator.roomId ?? '',
     userChatId: accumulator.userChatId ?? '',
     llmChatId: accumulator.llmChatId ?? '',
     answer: accumulator.answer,

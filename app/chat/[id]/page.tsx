@@ -86,16 +86,23 @@ export default function ChatDetailPage() {
     const tempMessageId = `pending-${pendingMessageIdRef.current++}`;
     setInput('');
     setPendingMessage(content);
+    setStreamingAnswer('');
     setIsProcessing(true);
 
-    const result = await sendMessageToExistingChat(params.id, content, tempMessageId);
+    const result = await sendMessageToExistingChat(params.id, content, tempMessageId, {
+      onAnswerChunk: ({ accumulated }) => {
+        setStreamingAnswer(accumulated);
+      },
+    });
 
     if (result.success && result.updatedThread) {
       setThread(result.updatedThread);
+      setStreamingAnswer('');
     } else {
       alert(`${getErrorMessage(result.error)}\n다시 시도해 주세요.`);
       upsertThread(previousThread);
       setThread(previousThread);
+      setStreamingAnswer('');
     }
 
     setPendingMessage('');

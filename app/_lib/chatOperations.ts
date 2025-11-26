@@ -23,7 +23,7 @@ export type SendMessageResult = {
   error?: unknown;
 };
 
-type CreateChatRoomStreamHandlers = {
+type AnswerStreamHandlers = {
   onAnswerChunk?: (payload: { chunk: string; accumulated: string }) => void;
 };
 
@@ -32,24 +32,24 @@ type CreateChatRoomStreamHandlers = {
  */
 export async function createNewChatWithMessage(
   content: string,
-  handlers: CreateChatRoomStreamHandlers = {}
+  handlers: AnswerStreamHandlers = {}
 ): Promise<CreateNewChatResult> {
   try {
     const response = await createChatRoom(content, handlers);
     const normalizedRoomId = String(response.roomId);
-    const normalizedRoomName = joinRoomNameChunks(response.roomName) || "새 채팅";
+    const normalizedRoomName = joinRoomNameChunks(response.roomName) || '새 채팅';
     const now = Date.now();
 
     const userMessage: ChatMessage = {
       id: response.userChatId || crypto.randomUUID(),
-      role: "user",
+      role: 'user',
       content,
       createdAt: now,
     };
 
     const assistantMessage: ChatMessage = {
       id: response.llmChatId || crypto.randomUUID(),
-      role: "assistant",
+      role: 'assistant',
       content: response.answer,
       createdAt: now + 1,
     };
@@ -75,7 +75,7 @@ export async function createNewChatWithMessage(
       thread: newThread,
     };
   } catch (error) {
-    console.error("채팅방 생성 실패:", error);
+    console.error('채팅방 생성 실패:', error);
     return {
       success: false,
       shouldRetry: isTimeoutError(error),
@@ -90,24 +90,25 @@ export async function createNewChatWithMessage(
 export async function sendMessageToExistingChat(
   roomId: string,
   content: string,
-  tempMessageId: string
+  tempMessageId: string,
+  handlers: AnswerStreamHandlers = {}
 ): Promise<SendMessageResult> {
   try {
     // 사용자 메시지를 임시 ID로 먼저 추가
     const userMessage: ChatMessage = {
       id: tempMessageId,
-      role: "user",
+      role: 'user',
       content,
       createdAt: Date.now(),
     };
 
     const updatedWithUser = appendMessage(roomId, userMessage);
     if (!updatedWithUser) {
-      throw new Error("메시지를 추가할 수 없습니다. 화면을 새로고침해 주세요.");
+      throw new Error('메시지를 추가할 수 없습니다. 화면을 새로고침해 주세요.');
     }
 
     // API 호출
-    const response = await sendMessage(roomId, content);
+    const response = await sendMessage(roomId, content, handlers);
 
     // 임시 ID를 서버에서 받은 ID로 교체
     const updatedWithServerUserId = replaceMessageId(roomId, tempMessageId, response.userChatId);
@@ -115,7 +116,7 @@ export async function sendMessageToExistingChat(
     // 어시스턴트 응답 추가
     const assistantMessage: ChatMessage = {
       id: response.llmChatId || crypto.randomUUID(),
-      role: "assistant",
+      role: 'assistant',
       content: response.answer,
       createdAt: Date.now(),
     };
@@ -127,7 +128,7 @@ export async function sendMessageToExistingChat(
       updatedThread: updatedWithAssistant || updatedWithServerUserId,
     };
   } catch (error) {
-    console.error("메시지 전송 실패:", error);
+    console.error('메시지 전송 실패:', error);
     return {
       success: false,
       error,
