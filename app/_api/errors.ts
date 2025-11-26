@@ -37,3 +37,15 @@ export function normalizeError(error: unknown): Error {
   return new Error("알 수 없는 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
 }
 
+//에러 객체에서 사용자에게 표시할 메시지 추출
+export function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return "알 수 없는 오류가 발생했습니다.";
+}
+
+//타임아웃 에러인지 확인
+export function isTimeoutError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes("시간 초과");
+}

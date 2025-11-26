@@ -1,8 +1,8 @@
 import { ChatApiError, buildErrorMessage, normalizeError } from "./errors";
 import { delay } from "./utils";
 
-const DEFAULT_TIMEOUT_MS = 60000; // 60초 (AI 응답 생성을 위해 증가)
-const DEFAULT_RETRY_COUNT = 2;
+export const DEFAULT_TIMEOUT_MS = 60000; // 60초 (AI 응답 생성을 위해 증가)
+export const DEFAULT_RETRY_COUNT = 2;
 
 export type RequestOptions = {
   timeoutMs?: number;
@@ -82,7 +82,7 @@ export function getApiBaseUrl(): string {
   return base;
 }
 
-function isRetryableError(error: unknown): boolean {
+export function isRetryableError(error: unknown): boolean {
   if (isTimeoutError(error)) {
     return false;
   }
@@ -91,7 +91,7 @@ function isRetryableError(error: unknown): boolean {
   }
   if (error instanceof Error) {
     const lowerMessage = error.message.toLowerCase();
-    return lowerMessage.includes("failed to fetch") || lowerMessage.includes("network error");
+    return lowerMessage.includes('failed to fetch') || lowerMessage.includes('network error');
   }
   return false;
 }
