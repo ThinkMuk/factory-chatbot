@@ -3,18 +3,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ChatMessage, ChatThread } from "@/app/types";
-import { appendMessage, getThread, upsertThread } from '@/app/_lib/storage';
-import { mockAssistantReply, mockCreateThreadFromFirstMessage } from '@/app/_mock';
-import { AssistantMessageBubble, UserMessageBubble } from '@/app/_components/chat';
+import { getThread, upsertThread } from '@/app/_lib/storage';
+import { createNewChatWithMessage, sendMessageToExistingChat, getErrorMessage } from '@/app/_lib/chatOperations';
+import { AssistantMessageBubble, UserMessageBubble, ChatInputFooter } from '@/app/_components/chat';
 
 export default function ChatDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const [thread, setThread] = useState<ChatThread | undefined>(undefined);
   const [input, setInput] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [pendingMessage, setPendingMessage] = useState<string>('');
   const listRef = useRef<HTMLDivElement | null>(null);
+  const pendingMessageIdRef = useRef(0);
 
-  // id가 'new'인 경우 스레드가 없는 상태로 시작
   const isNewChat = params?.id === 'new';
 
   useEffect(() => {
@@ -26,49 +28,95 @@ export default function ChatDetailPage() {
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
-  }, [messages.length]);
+  }, [messages.length, pendingMessage, isProcessing]);
 
-  const sendUserMessage = () => {
-    const content = input.trim();
-    if (!content) return;
+  const handleNewChatCreation = async (content: string) => {
+    setIsProcessing(true);
+    setPendingMessage(content);
+    setInput('');
 
-    // 새 채팅인 경우: 첫 메시지로 스레드 생성
-    if (isNewChat) {
-      const newThread: ChatThread = mockCreateThreadFromFirstMessage(content);
-      setThread(newThread);
-      setInput('');
-      upsertThread(newThread);
-      router.replace(`/chat/${newThread.id}`);
+    const result = await createNewChatWithMessage(content);
+
+    if (result.success && result.thread) {
+      setThread(result.thread);
+      setPendingMessage('');
+      router.replace(`/chat/${result.thread.id}`);
+      setIsProcessing(false);
       return;
     }
 
-    // 기존 스레드에 메시지 추가
-    if (!thread || !params?.id) return;
-    const updated = appendMessage(params.id, { role: 'user', content });
-    setThread(updated);
-    setInput('');
+    // 에러 처리
+    if (result.shouldRetry) {
+      const shouldRetry = window.confirm('응답 시간이 초과되었습니다. 다시 시도하시겠습니까?');
+      if (shouldRetry) {
+        setPendingMessage('');
+        setIsProcessing(false);
+        setInput(content); // 원본 내용 복원
+        setTimeout(() => sendUserMessage(), 0);
+        return;
+      }
+    } else {
+      alert(`${getErrorMessage(result.error)}\n잠시 후 다시 시도해 주세요.`);
+    }
 
-    // mock assistant reply
-    setTimeout(() => {
-      const reply = mockAssistantReply(content);
-      const after = appendMessage(params.id!, { role: 'assistant', content: reply });
-      setThread(after);
-    }, 400);
+    setPendingMessage('');
+    setIsProcessing(false);
+  };
+
+  const handleExistingChatMessage = async (content: string) => {
+    if (!thread || !params?.id) {
+      alert('대화 정보를 찾을 수 없습니다. 목록에서 다시 선택해 주세요.');
+      return;
+    }
+
+    const previousThread: ChatThread = {
+      ...thread,
+      messages: [...thread.messages],
+    };
+
+    const tempMessageId = `pending-${pendingMessageIdRef.current++}`;
+    setInput('');
+    setPendingMessage(content);
+    setIsProcessing(true);
+
+    const result = await sendMessageToExistingChat(params.id, content, tempMessageId);
+
+    if (result.success && result.updatedThread) {
+      setThread(result.updatedThread);
+    } else {
+      alert(`${getErrorMessage(result.error)}\n다시 시도해 주세요.`);
+      upsertThread(previousThread);
+      setThread(previousThread);
+    }
+
+    setPendingMessage('');
+    setIsProcessing(false);
+  };
+
+  const sendUserMessage = async () => {
+    if (isProcessing) return;
+
+    const content = input.trim();
+    if (!content) return;
+
+    if (isNewChat) {
+      await handleNewChatCreation(content);
+    } else {
+      await handleExistingChatMessage(content);
+    }
   };
 
   // 새 채팅이 아닌데 스레드가 없는 경우에만 에러 표시
   if (!isNewChat && !thread) {
     return (
-      <div className='h-full flex flex-col'>
-        <main className='flex-1 p-4 flex items-center justify-center text-sm text-black/60'>
-          존재하지 않는 대화입니다.
-        </main>
-      </div>
+      <main className='flex-1 p-4 flex items-center justify-center text-sm text-black/60'>
+        존재하지 않는 대화입니다.
+      </main>
     );
   }
 
   return (
-    <div className='h-full flex flex-col'>
+    <>
       <div ref={listRef} className='flex-1 overflow-auto p-4 space-y-3'>
         {messages.map((m: ChatMessage) =>
           m.role === 'user' ? (
@@ -77,35 +125,18 @@ export default function ChatDetailPage() {
             <AssistantMessageBubble key={m.id} content={m.content} />
           )
         )}
+        {pendingMessage && <UserMessageBubble content={pendingMessage} />}
+        {isProcessing && <AssistantMessageBubble isLoading={true} />}
         {/* visualization placeholder */}
         {/* 가능하면 차트나 그래프로 해당 내용을 시각화하여 표시 */}
       </div>
-      <footer className='p-2'>
-        <div className='flex gap-2'>
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              // 한글 IME 조합 중 Enter 입력은 무시
-              if ((e.nativeEvent as KeyboardEvent).isComposing) return;
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                sendUserMessage();
-              }
-            }}
-            placeholder='메시지를 입력하세요'
-            className='flex-1 h-[110px] border bg-[#FAFBFD] border-[#DCDCDC] rounded-2xl p-3 text-sm outline-none focus:ring-1 focus:ring-[#d0cfcf] resize-none'
-          />
-          <button
-            onClick={sendUserMessage}
-            className='h-[110px] px-4 rounded-2xl bg-[#194268] text-white cursor-pointer text-base font-bold hover:bg-[#103453] transition-colors duration-200'
-          >
-            전송
-          </button>
-        </div>
-      </footer>
-    </div>
+      <ChatInputFooter
+        input={input}
+        setInput={setInput}
+        onSendMessage={sendUserMessage}
+        isProcessing={isProcessing}
+        isNewChat={isNewChat}
+      />
+    </>
   );
 }
-
-
