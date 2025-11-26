@@ -20,7 +20,7 @@ export type NewThreadPayload = {
 // --- Chat Room Types ---
 export interface ChatRoom {
   roomId: string;
-  roomName: string;
+  roomName: string | string[];
   date: string;
 }
 
@@ -31,7 +31,7 @@ export interface ChatRoomListResponse {
 // --- Chat API Types ---
 export interface CreateChatRoomResponse {
   roomId: string;
-  roomName: string;
+  roomName: string | string[];
   userChatId: string;
   llmChatId: string;
   answer: string;
