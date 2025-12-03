@@ -8,6 +8,7 @@ type AssistantMessageBubbleProps = {
   isLoading?: boolean;
   isStreaming?: boolean;
   onTypingComplete?: () => void;
+  onStreamingProgress?: () => void;
 };
 
 const ANIMATION_CONFIG = {
@@ -22,6 +23,7 @@ export default function AssistantMessageBubble({
   isLoading = false,
   isStreaming = false,
   onTypingComplete,
+  onStreamingProgress,
 }: AssistantMessageBubbleProps) {
   const [displayedLength, setDisplayedLength] = useState(0);
   const [shouldAnimate, setShouldAnimate] = useState(isStreaming);
@@ -59,6 +61,13 @@ export default function AssistantMessageBubble({
     return () => clearTimeout(timer);
   }, [shouldAnimate, displayedLength, textContent, isStreaming, onTypingComplete]);
 
+  useEffect(() => {
+    if (!shouldAnimate) {
+      return;
+    }
+    onStreamingProgress?.();
+  }, [displayedLength, shouldAnimate, onStreamingProgress]);
+
   // 표시할 텍스트만 추출
   const isTyping = shouldAnimate && displayedLength < textContent.length;
   const displayedText = isTyping ? textContent.slice(0, displayedLength) : textContent;
@@ -84,7 +93,9 @@ export default function AssistantMessageBubble({
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         transition={{
-                          duration: isStreaming ? ANIMATION_CONFIG.STREAMING_DURATION : ANIMATION_CONFIG.FINALIZING_DURATION,
+                          duration: isStreaming
+                            ? ANIMATION_CONFIG.STREAMING_DURATION
+                            : ANIMATION_CONFIG.FINALIZING_DURATION,
                           delay: 0,
                           ease: 'easeOut',
                         }}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { ChatMessage, ChatThread } from '@/app/types';
 import { getThread, upsertThread } from '@/app/_lib/storage';
@@ -19,6 +19,7 @@ export default function ChatDetailPage() {
   const [pendingMessage, setPendingMessage] = useState<string>('');
   const [streamingAnswer, setStreamingAnswer] = useState('');
   const [isStreamingActive, setIsStreamingActive] = useState(false);
+  const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
   const listRef = useRef<HTMLDivElement | null>(null);
   const pendingMessageIdRef = useRef(0);
   const hasUpdatedUrlRef = useRef(false);
@@ -29,6 +30,15 @@ export default function ChatDetailPage() {
 
   const handleStreamingAnimationComplete = () => {
     setStreamingAnswer('');
+  };
+
+  // 사용자가 스크롤했는지 감지
+  const handleScroll = () => {
+    const element = listRef.current;
+    if (!element) return;
+
+    const isAtBottom = element.scrollHeight - element.scrollTop - element.clientHeight < 10;
+    setAutoScrollEnabled(isAtBottom);
   };
 
   useEffect(() => {
@@ -55,8 +65,19 @@ export default function ChatDetailPage() {
   }, [thread, streamingAnswer, isStreamingActive]);
 
   useEffect(() => {
-    listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
-  }, [messages.length, pendingMessage, isProcessing]);
+    if (autoScrollEnabled) {
+      listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
+    }
+  }, [messages.length, pendingMessage, isProcessing, streamingAnswer, autoScrollEnabled]);
+
+  const handleStreamingProgress = useCallback(() => {
+    if (!autoScrollEnabled) return;
+    requestAnimationFrame(() => {
+      const element = listRef.current;
+      if (!element) return;
+      element.scrollTo({ top: element.scrollHeight, behavior: 'auto' });
+    });
+  }, [autoScrollEnabled]);
 
   const handleNewChatCreation = async (content: string) => {
     setIsProcessing(true);
@@ -197,7 +218,7 @@ export default function ChatDetailPage() {
 
   return (
     <>
-      <div ref={listRef} className='flex-1 overflow-auto p-4 space-y-3'>
+      <div ref={listRef} onScroll={handleScroll} className='flex-1 overflow-auto p-4 space-y-3'>
         {messages.map((m: ChatMessage) =>
           m.role === 'user' ? (
             <UserMessageBubble key={m.id} content={m.content} />
@@ -211,10 +232,10 @@ export default function ChatDetailPage() {
             content={streamingAnswer}
             isStreaming={isStreamingActive}
             onTypingComplete={handleStreamingAnimationComplete}
+            onStreamingProgress={handleStreamingProgress}
           />
         )}
         {isProcessing && !streamingAnswer && <AssistantMessageBubble isLoading={true} />}
-        {/* visualization placeholder */}
         {/* 가능하면 차트나 그래프로 해당 내용을 시각화하여 표시 */}
       </div>
       <ChatInputFooter
