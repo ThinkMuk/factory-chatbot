@@ -10,6 +10,13 @@ type AssistantMessageBubbleProps = {
   onTypingComplete?: () => void;
 };
 
+const ANIMATION_CONFIG = {
+  STREAMING_DELAY_MS: 20,
+  FINALIZING_DELAY_MS: 1,
+  STREAMING_DURATION: 0.1,
+  FINALIZING_DURATION: 0.05,
+} as const;
+
 export default function AssistantMessageBubble({
   content,
   isLoading = false,
@@ -44,9 +51,10 @@ export default function AssistantMessageBubble({
       return;
     }
 
+    const delay = isStreaming ? ANIMATION_CONFIG.STREAMING_DELAY_MS : ANIMATION_CONFIG.FINALIZING_DELAY_MS;
     const timer = setTimeout(() => {
       setDisplayedLength((prev) => Math.min(prev + 1, textContent.length));
-    }, 20);
+    }, delay);
 
     return () => clearTimeout(timer);
   }, [shouldAnimate, displayedLength, textContent, isStreaming, onTypingComplete]);
@@ -76,7 +84,7 @@ export default function AssistantMessageBubble({
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         transition={{
-                          duration: 0.05,
+                          duration: isStreaming ? ANIMATION_CONFIG.STREAMING_DURATION : ANIMATION_CONFIG.FINALIZING_DURATION,
                           delay: 0,
                           ease: 'easeOut',
                         }}
