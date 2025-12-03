@@ -4,16 +4,18 @@ import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { getThread } from "@/app/_lib/storage";
 import { Undo2 } from "lucide-react";
+import { TEMP_ROOM_TITLE_EVENT, TempRoomTitleDetail } from '@/app/_lib/chatEvents';
 
 export default function Header() {
   const router = useRouter();
   const pathname = usePathname();
   const [canGoBack, setCanGoBack] = useState(false);
   const [hasMounted, setHasMounted] = useState(false);
+  const [tempTitles, setTempTitles] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      setCanGoBack(pathname !== "/" && window.history.length > 1);
+    if (typeof window !== 'undefined') {
+      setCanGoBack(pathname !== '/' && window.history.length > 1);
     }
   }, [pathname]);
 
@@ -21,18 +23,45 @@ export default function Header() {
     setHasMounted(true);
   }, []);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<TempRoomTitleDetail>).detail;
+      if (!detail?.roomId) return;
+      setTempTitles((prev) => {
+        if (detail.title) {
+          if (prev[detail.roomId] === detail.title) return prev;
+          return {
+            ...prev,
+            [detail.roomId]: detail.title,
+          };
+        }
+        if (!(detail.roomId in prev)) return prev;
+        const next = { ...prev };
+        delete next[detail.roomId];
+        return next;
+      });
+    };
+    window.addEventListener(TEMP_ROOM_TITLE_EVENT, handler as EventListener);
+    return () => {
+      window.removeEventListener(TEMP_ROOM_TITLE_EVENT, handler as EventListener);
+    };
+  }, []);
+
   const title = useMemo(() => {
-    if (!pathname) return "Factory Chatbot";
-    if (pathname.startsWith("/chat/")) {
-      const id = pathname.split("/")[2];
-      if (id === "new") return "새 채팅";
+    if (!pathname) return 'Factory Chatbot';
+    if (pathname.startsWith('/chat/')) {
+      const id = pathname.split('/')[2];
+      if (id === 'new') return '새 채팅';
+      const tempTitle = id ? tempTitles[id] : undefined;
       // Defer localStorage access until after hydration to avoid SSR mismatch
-      if (!hasMounted) return "채팅";
+      if (!hasMounted) return tempTitle ?? '채팅';
       const thread = id ? getThread(id) : undefined;
-      return thread?.title ?? "채팅";
+      return thread?.title ?? tempTitle ?? '채팅';
     }
-    return "Factory Chatbot";
-  }, [pathname, hasMounted]);
+    return 'Factory Chatbot';
+  }, [pathname, hasMounted, tempTitles]);
 
   return (
     <header className='h-12 flex items-center bg-[#323233] justify-between border-b border-black/10 px-4'>

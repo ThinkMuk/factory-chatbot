@@ -24,7 +24,12 @@ export type SendMessageResult = {
 };
 
 type AnswerStreamHandlers = {
-  onAnswerChunk?: (payload: { chunk: string; accumulated: string }) => void;
+  onAnswerChunk?: (payload: {
+    chunk: string;
+    accumulated: string;
+    roomId?: string;
+    roomName?: string;
+  }) => void;
 };
 
 /*

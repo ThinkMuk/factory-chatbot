@@ -18,7 +18,7 @@ type MinimalSendPayload = {
 };
 
 type AnswerStreamOptions = {
-  onAnswerChunk?: (payload: { chunk: string; accumulated: string }) => void;
+  onAnswerChunk?: (payload: { chunk: string; accumulated: string; roomId?: string; roomName?: string }) => void;
 };
 
 const CREATE_CHAT_STREAM_TIMEOUT_MS = DEFAULT_TIMEOUT_MS;
@@ -271,7 +271,12 @@ function processSseEventChunk(
   }
   const chunk = mergeChunkIntoAccumulator(parsed, accumulator);
   if (chunk && options.onAnswerChunk) {
-    options.onAnswerChunk({ chunk, accumulated: accumulator.answer });
+    options.onAnswerChunk({
+      chunk,
+      accumulated: accumulator.answer,
+      roomId: accumulator.roomId,
+      roomName: accumulator.roomName,
+    });
   }
 }
 
@@ -414,7 +419,11 @@ function processSendSseEventChunk(
   }
   const chunk = mergeSendChunkIntoAccumulator(parsed, accumulator);
   if (chunk && options.onAnswerChunk) {
-    options.onAnswerChunk({ chunk, accumulated: accumulator.answer });
+    options.onAnswerChunk({
+      chunk,
+      accumulated: accumulator.answer,
+      roomId: accumulator.roomId,
+    });
   }
 }
 

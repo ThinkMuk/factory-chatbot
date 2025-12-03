@@ -1,31 +1,58 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { ChatMessage, ChatThread } from "@/app/types";
+import { useParams } from 'next/navigation';
+import { ChatMessage, ChatThread } from '@/app/types';
 import { getThread, upsertThread } from '@/app/_lib/storage';
 import { createNewChatWithMessage, sendMessageToExistingChat, getErrorMessage } from '@/app/_lib/chatOperations';
+import { emitTempRoomTitle } from '@/app/_lib/chatEvents';
 import { AssistantMessageBubble, UserMessageBubble, ChatInputFooter } from '@/app/_components/chat';
 
 export default function ChatDetailPage() {
   const params = useParams<{ id: string }>();
-  const router = useRouter();
   const [thread, setThread] = useState<ChatThread | undefined>(undefined);
+  const [resolvedRoomId, setResolvedRoomId] = useState<string | undefined>(
+    params?.id && params.id !== 'new' ? params.id : undefined
+  );
   const [input, setInput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [pendingMessage, setPendingMessage] = useState<string>('');
   const [streamingAnswer, setStreamingAnswer] = useState('');
+  const [isStreamingActive, setIsStreamingActive] = useState(false);
   const listRef = useRef<HTMLDivElement | null>(null);
   const pendingMessageIdRef = useRef(0);
+  const hasUpdatedUrlRef = useRef(false);
 
-  const isNewChat = params?.id === 'new';
+  const activeRoomId = resolvedRoomId ?? (params?.id && params.id !== 'new' ? params.id : undefined);
+  const isNewChatRoute = params?.id === 'new';
+  const isNewChat = !activeRoomId && isNewChatRoute;
+
+  const handleStreamingAnimationComplete = () => {
+    setStreamingAnswer('');
+  };
 
   useEffect(() => {
-    if (!params?.id || isNewChat) return;
+    if (!params?.id) return;
+    if (params.id === 'new') {
+      if (!activeRoomId) {
+        setThread(undefined);
+      }
+      return;
+    }
+    setResolvedRoomId(params.id);
     setThread(getThread(params.id));
-  }, [params?.id, isNewChat]);
+  }, [params?.id, activeRoomId]);
 
-  const messages = useMemo(() => thread?.messages ?? [], [thread]);
+  const messages = useMemo(() => {
+    if (!thread) return [];
+    if (streamingAnswer && !isStreamingActive && thread.messages.length > 0) {
+      const lastMessage = thread.messages[thread.messages.length - 1];
+      if (lastMessage.role === 'assistant' && lastMessage.content === streamingAnswer) {
+        return thread.messages.slice(0, -1);
+      }
+    }
+    return thread.messages;
+  }, [thread, streamingAnswer, isStreamingActive]);
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
@@ -35,20 +62,49 @@ export default function ChatDetailPage() {
     setIsProcessing(true);
     setPendingMessage(content);
     setStreamingAnswer('');
+    setIsStreamingActive(true);
     setInput('');
+    hasUpdatedUrlRef.current = false;
+
+    const revertToNewChat = () => {
+      if (hasUpdatedUrlRef.current && typeof window !== 'undefined') {
+        window.history.replaceState(null, '', '/chat/new');
+      }
+      if (resolvedRoomId) {
+        emitTempRoomTitle({ roomId: resolvedRoomId, title: undefined });
+      }
+      setIsStreamingActive(false);
+      setResolvedRoomId(undefined);
+      hasUpdatedUrlRef.current = false;
+    };
 
     const result = await createNewChatWithMessage(content, {
-      onAnswerChunk: ({ accumulated }) => {
+      onAnswerChunk: ({ accumulated, roomId, roomName }) => {
+        setIsStreamingActive(true);
+        if (roomId) {
+          setResolvedRoomId(roomId);
+          if (!hasUpdatedUrlRef.current && typeof window !== 'undefined') {
+            window.history.replaceState(null, '', `/chat/${roomId}`);
+            hasUpdatedUrlRef.current = true;
+          }
+          if (roomName) {
+            emitTempRoomTitle({ roomId, title: roomName });
+          }
+        }
         setStreamingAnswer(accumulated);
       },
     });
 
     if (result.success && result.thread) {
+      const finalAssistantMessage = result.thread.messages[result.thread.messages.length - 1];
+      setResolvedRoomId(result.thread.id);
       setThread(result.thread);
       setPendingMessage('');
-      setStreamingAnswer('');
-      router.replace(`/chat/${result.thread.id}`);
+      setIsStreamingActive(false);
+      setStreamingAnswer(finalAssistantMessage?.content ?? '');
       setIsProcessing(false);
+      emitTempRoomTitle({ roomId: result.thread.id, title: undefined });
+      hasUpdatedUrlRef.current = false;
       return;
     }
 
@@ -56,6 +112,7 @@ export default function ChatDetailPage() {
     if (result.shouldRetry) {
       const shouldRetry = window.confirm('응답 시간이 초과되었습니다. 다시 시도하시겠습니까?');
       if (shouldRetry) {
+        revertToNewChat();
         setPendingMessage('');
         setStreamingAnswer('');
         setIsProcessing(false);
@@ -67,13 +124,15 @@ export default function ChatDetailPage() {
       alert(`${getErrorMessage(result.error)}\n잠시 후 다시 시도해 주세요.`);
     }
 
+    revertToNewChat();
     setPendingMessage('');
     setStreamingAnswer('');
+    setIsStreamingActive(false);
     setIsProcessing(false);
   };
 
   const handleExistingChatMessage = async (content: string) => {
-    if (!thread || !params?.id) {
+    if (!thread || !activeRoomId) {
       alert('대화 정보를 찾을 수 없습니다. 목록에서 다시 선택해 주세요.');
       return;
     }
@@ -87,22 +146,27 @@ export default function ChatDetailPage() {
     setInput('');
     setPendingMessage(content);
     setStreamingAnswer('');
+    setIsStreamingActive(true);
     setIsProcessing(true);
 
-    const result = await sendMessageToExistingChat(params.id, content, tempMessageId, {
+    const result = await sendMessageToExistingChat(activeRoomId, content, tempMessageId, {
       onAnswerChunk: ({ accumulated }) => {
+        setIsStreamingActive(true);
         setStreamingAnswer(accumulated);
       },
     });
 
     if (result.success && result.updatedThread) {
+      const finalAssistantMessage = result.updatedThread.messages[result.updatedThread.messages.length - 1];
       setThread(result.updatedThread);
-      setStreamingAnswer('');
+      setIsStreamingActive(false);
+      setStreamingAnswer(finalAssistantMessage?.content ?? '');
     } else {
       alert(`${getErrorMessage(result.error)}\n다시 시도해 주세요.`);
       upsertThread(previousThread);
       setThread(previousThread);
       setStreamingAnswer('');
+      setIsStreamingActive(false);
     }
 
     setPendingMessage('');
@@ -122,8 +186,8 @@ export default function ChatDetailPage() {
     }
   };
 
-  // 새 채팅이 아닌데 스레드가 없는 경우에만 에러 표시
-  if (!isNewChat && !thread) {
+  // 새 채팅이 아닌데 스레드가 없고 현재 처리 중이 아닐 때만 에러 표시
+  if (!isNewChat && !thread && !isProcessing) {
     return (
       <main className='flex-1 p-4 flex items-center justify-center text-sm text-black/60'>
         존재하지 않는 대화입니다.
@@ -142,7 +206,13 @@ export default function ChatDetailPage() {
           )
         )}
         {pendingMessage && <UserMessageBubble content={pendingMessage} />}
-        {streamingAnswer && <AssistantMessageBubble content={streamingAnswer} />}
+        {streamingAnswer && (
+          <AssistantMessageBubble
+            content={streamingAnswer}
+            isStreaming={isStreamingActive}
+            onTypingComplete={handleStreamingAnimationComplete}
+          />
+        )}
         {isProcessing && !streamingAnswer && <AssistantMessageBubble isLoading={true} />}
         {/* visualization placeholder */}
         {/* 가능하면 차트나 그래프로 해당 내용을 시각화하여 표시 */}
