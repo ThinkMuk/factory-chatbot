@@ -5,7 +5,6 @@ import { usePathname, useRouter } from "next/navigation";
 import type { ChatRoom } from "@/app/types";
 import { deleteChatRoom as deleteChatRoomApi } from "@/app/_api/chat";
 import { useChatRoomList } from "@/app/_hooks/useChatRoomList";
-import { deleteThread } from "@/app/_lib/storage";
 import { joinRoomNameChunks } from "@/app/_lib/roomNameUtils";
 import ThreadListItem from "@/app/_components/ThreadListItem";
 
@@ -58,7 +57,6 @@ export default function ChatRoomList({ onRoomClick, useLink = false }: ChatRoomL
       try {
         await deleteChatRoomApi(roomId);
         setCachedThreads((prev) => prev.filter((room) => room.roomId !== roomId));
-        deleteThread(roomId);
         if (pathname === `/chat/${roomId}`) {
           router.push("/");
         }

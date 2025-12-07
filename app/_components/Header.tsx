@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { getThread } from "@/app/_lib/storage";
+import { loadChatRooms } from "@/app/_lib/chatRoomsStorage";
 import { Undo2 } from "lucide-react";
 import { TEMP_ROOM_TITLE_EVENT, TempRoomTitleDetail } from '@/app/_lib/chatEvents';
 
@@ -57,8 +57,11 @@ export default function Header() {
       const tempTitle = id ? tempTitles[id] : undefined;
       // Defer localStorage access until after hydration to avoid SSR mismatch
       if (!hasMounted) return tempTitle ?? '채팅';
-      const thread = id ? getThread(id) : undefined;
-      return thread?.title ?? tempTitle ?? '채팅';
+      const chatRooms = loadChatRooms();
+      const room = id ? chatRooms.find(r => r.roomId === id) : undefined;
+      const roomName = room?.roomName;
+      const displayName = Array.isArray(roomName) ? roomName.join('') : roomName;
+      return displayName ?? tempTitle ?? '채팅';
     }
     return 'Factory Chatbot';
   }, [pathname, hasMounted, tempTitles]);

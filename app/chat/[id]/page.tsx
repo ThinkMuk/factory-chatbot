@@ -1,16 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { ChatMessage, ChatThread } from '@/app/types';
-import { getThread, upsertThread } from '@/app/_lib/storage';
+import { ChatMessage } from '@/app/types';
 import { createNewChatWithMessage, sendMessageToExistingChat, getErrorMessage } from '@/app/_lib/chatOperations';
 import { emitTempRoomTitle } from '@/app/_lib/chatEvents';
 import { AssistantMessageBubble, UserMessageBubble, ChatInputFooter } from '@/app/_components/chat';
+import { fetchChatHistory } from '@/app/_api/chat';
+import { transformServerMessage } from '@/app/_lib/storage';
 
 export default function ChatDetailPage() {
   const params = useParams<{ id: string }>();
-  const [thread, setThread] = useState<ChatThread | undefined>(undefined);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [resolvedRoomId, setResolvedRoomId] = useState<string | undefined>(
     params?.id && params.id !== 'new' ? params.id : undefined
   );
@@ -23,6 +24,7 @@ export default function ChatDetailPage() {
   const listRef = useRef<HTMLDivElement | null>(null);
   const pendingMessageIdRef = useRef(0);
   const hasUpdatedUrlRef = useRef(false);
+  const hasLoadedHistoryRef = useRef<Set<string>>(new Set());
 
   const activeRoomId = resolvedRoomId ?? (params?.id && params.id !== 'new' ? params.id : undefined);
   const isNewChatRoute = params?.id === 'new';
@@ -41,29 +43,40 @@ export default function ChatDetailPage() {
     setAutoScrollEnabled(isAtBottom);
   };
 
+  // 서버에서 채팅 기록 불러오기
   useEffect(() => {
     if (!params?.id) return;
     if (params.id === 'new') {
       if (!activeRoomId) {
-        setThread(undefined);
+        setMessages([]);
       }
       return;
     }
     setResolvedRoomId(params.id);
-    setThread(getThread(params.id));
+
+    // 서버에서 채팅 기록 불러오기
+    if (params.id && !hasLoadedHistoryRef.current.has(params.id)) {
+      hasLoadedHistoryRef.current.add(params.id);
+
+      const loadHistory = async () => {
+        try {
+          const response = await fetchChatHistory(params.id);
+          if (response.chattings && response.chattings.length > 0) {
+            // 서버에서 최신 메시지가 먼저 오므로 reverse()로 오래된 메시지부터 정렬
+            const clientMessages = response.chattings.reverse().map((msg, index) => transformServerMessage(msg, index));
+            setMessages(clientMessages);
+          }
+        } catch (error) {
+          console.error('채팅 기록 불러오기 실패:', error);
+          hasLoadedHistoryRef.current.delete(params.id);
+        }
+      };
+
+      loadHistory();
+    }
   }, [params?.id, activeRoomId]);
 
-  const messages = useMemo(() => {
-    if (!thread) return [];
-    if (streamingAnswer && !isStreamingActive && thread.messages.length > 0) {
-      const lastMessage = thread.messages[thread.messages.length - 1];
-      if (lastMessage.role === 'assistant' && lastMessage.content === streamingAnswer) {
-        return thread.messages.slice(0, -1);
-      }
-    }
-    return thread.messages;
-  }, [thread, streamingAnswer, isStreamingActive]);
-
+  // 자동 스크롤
   useEffect(() => {
     if (autoScrollEnabled) {
       listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
@@ -119,7 +132,7 @@ export default function ChatDetailPage() {
     if (result.success && result.thread) {
       const finalAssistantMessage = result.thread.messages[result.thread.messages.length - 1];
       setResolvedRoomId(result.thread.id);
-      setThread(result.thread);
+      setMessages(result.thread.messages);
       setPendingMessage('');
       setIsStreamingActive(false);
       setStreamingAnswer(finalAssistantMessage?.content ?? '');
@@ -137,7 +150,7 @@ export default function ChatDetailPage() {
         setPendingMessage('');
         setStreamingAnswer('');
         setIsProcessing(false);
-        setInput(content); // 원본 내용 복원
+        setInput(content);
         setTimeout(() => sendUserMessage(), 0);
         return;
       }
@@ -153,16 +166,12 @@ export default function ChatDetailPage() {
   };
 
   const handleExistingChatMessage = async (content: string) => {
-    if (!thread || !activeRoomId) {
+    if (!activeRoomId) {
       alert('대화 정보를 찾을 수 없습니다. 목록에서 다시 선택해 주세요.');
       return;
     }
 
-    const previousThread: ChatThread = {
-      ...thread,
-      messages: [...thread.messages],
-    };
-
+    const previousMessages = [...messages];
     const tempMessageId = `pending-${pendingMessageIdRef.current++}`;
     setInput('');
     setPendingMessage(content);
@@ -177,15 +186,20 @@ export default function ChatDetailPage() {
       },
     });
 
-    if (result.success && result.updatedThread) {
-      const finalAssistantMessage = result.updatedThread.messages[result.updatedThread.messages.length - 1];
-      setThread(result.updatedThread);
+    if (result.success && result.userMessage && result.assistantMessage) {
+      // 임시 ID를 서버 ID로 교체한 사용자 메시지
+      const finalUserMessage: ChatMessage = {
+        ...result.userMessage,
+        id: result.serverUserChatId || result.userMessage.id,
+      };
+
+      // 메시지 배열에 추가
+      setMessages([...messages, finalUserMessage, result.assistantMessage]);
       setIsStreamingActive(false);
-      setStreamingAnswer(finalAssistantMessage?.content ?? '');
+      setStreamingAnswer(result.assistantMessage.content);
     } else {
       alert(`${getErrorMessage(result.error)}\n다시 시도해 주세요.`);
-      upsertThread(previousThread);
-      setThread(previousThread);
+      setMessages(previousMessages);
       setStreamingAnswer('');
       setIsStreamingActive(false);
     }
@@ -207,8 +221,8 @@ export default function ChatDetailPage() {
     }
   };
 
-  // 새 채팅이 아닌데 스레드가 없고 현재 처리 중이 아닐 때만 에러 표시
-  if (!isNewChat && !thread && !isProcessing) {
+  // 새 채팅이 아닌데 메시지가 없고 현재 처리 중이 아닐 때만 에러 표시
+  if (!isNewChat && messages.length === 0 && !isProcessing) {
     return (
       <main className='flex-1 p-4 flex items-center justify-center text-sm text-black/60'>
         존재하지 않는 대화입니다.
@@ -236,7 +250,6 @@ export default function ChatDetailPage() {
           />
         )}
         {isProcessing && !streamingAnswer && <AssistantMessageBubble isLoading={true} />}
-        {/* 가능하면 차트나 그래프로 해당 내용을 시각화하여 표시 */}
       </div>
       <ChatInputFooter
         input={input}

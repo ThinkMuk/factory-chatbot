@@ -75,20 +75,23 @@ export function useChatRoomList(): UseChatRoomListReturn {
       await initChatRoomList();
       return;
     }
-    const latestRoomId = rooms[0]?.roomId;
-    if (!latestRoomId) return;
+    // 무한스크롤은 과거 방향으로 불러오기 (목록의 마지막 roomId 사용)
+    const oldestRoomId = rooms[rooms.length - 1]?.roomId;
+    if (!oldestRoomId) return;
     setIsLoading(true);
     try {
       const res = await fetchChatRooms({
-        lastRoomId: latestRoomId,
+        lastRoomId: oldestRoomId,
         size: ChatApiConstants.DEFAULT_PAGE_SIZE,
       });
       // roomId 기준으로 중복 제거
       const existingIds = new Set(rooms.map((r) => r.roomId));
       const newItems = res.chatRooms.filter((r: ChatRoom) => !existingIds.has(r.roomId));
-      const next = newItems.concat(rooms);
+      // 과거 방향이므로 기존 목록 뒤에 추가
+      const next = rooms.concat(newItems);
       if (!isMountedRef.current) return;
       setRooms(next);
+      // 로컬 저장은 saveChatRooms가 자동으로 최신 10개만 저장
       saveToLocal(next);
       setHasMore(res.chatRooms.length === ChatApiConstants.DEFAULT_PAGE_SIZE);
     } catch (err) {

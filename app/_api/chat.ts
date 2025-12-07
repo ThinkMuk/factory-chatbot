@@ -1,6 +1,7 @@
 "use client";
 
-import type { CreateChatRoomResponse, SendMessageResponse } from "@/app/types";
+import { CHAT_MESSAGE_PAGE_SIZE } from '@/app/constants';
+import type { ChatHistoryResponse, CreateChatRoomResponse, SendMessageResponse } from '@/app/types';
 
 import { joinRoomNameChunks, isValidRoomNameValue } from '@/app/_lib/roomNameUtils';
 import { DEFAULT_RETRY_COUNT, DEFAULT_TIMEOUT_MS, getApiBaseUrl, isRetryableError, requestWithRetry } from './client';
@@ -15,6 +16,13 @@ type MinimalCreatePayload = {
 type MinimalSendPayload = {
   roomId: string;
   question: string;
+};
+
+type ChatHistoryItem = ChatHistoryResponse['chattings'][number];
+
+type RawChatHistoryResponse = {
+  roomId?: unknown;
+  chattings?: Array<Omit<ChatHistoryItem, 'chatId'> & { chatId: unknown }>;
 };
 
 type AnswerStreamOptions = {
@@ -91,6 +99,39 @@ export async function sendMessage(
   throw normalizeError(lastError);
 }
 
+export async function fetchChatHistory(
+  roomId: string,
+  lastChatId?: string,
+  size = CHAT_MESSAGE_PAGE_SIZE
+): Promise<ChatHistoryResponse> {
+  if (!roomId) {
+    throw new Error('채팅방 정보가 없습니다.');
+  }
+  const limit = Number.isFinite(size) && size > 0 ? Math.floor(size) : CHAT_MESSAGE_PAGE_SIZE;
+  const params = new URLSearchParams({
+    roomId,
+    size: String(limit),
+  });
+  if (lastChatId) {
+    params.set('lastChatId', lastChatId);
+  }
+  const path = `/v1/chat?${params.toString()}`;
+
+  // text로 받아서 normalizeIdTokens 적용 후 파싱
+  const text = await requestWithRetry<string>(
+    path,
+    {
+      method: 'GET',
+      headers: buildHeaders(),
+    },
+    { responseType: 'text' }
+  );
+
+  const normalizedText = normalizeIdTokens(text);
+  const data = JSON.parse(normalizedText) as RawChatHistoryResponse;
+  return normalizeChatHistoryResponse(data);
+}
+
 export async function deleteChatRoom(roomId: string): Promise<void> {
   if (!roomId) {
     throw new Error('채팅방 정보가 없습니다.');
@@ -125,7 +166,7 @@ function validateSendMessageResponse(data: SendMessageResponse) {
 
 function normalizeIdTokens(raw: string): string {
   return raw.replace(
-    /("(?:roomId|userChatId|llmChatId)"\s*:\s*)(\d+)/g,
+    /("(?:roomId|userChatId|llmChatId|chatId)"\s*:\s*)(\d+)/g,
     (_match, prefix, digits) => `${prefix}"${digits}"`
   );
 }
@@ -149,6 +190,20 @@ function normalizeIdValue(value: unknown): string {
     }
   }
   return '';
+}
+
+function normalizeChatHistoryResponse(raw: RawChatHistoryResponse): ChatHistoryResponse {
+  if (!raw || !Array.isArray(raw.chattings)) {
+    throw new Error('채팅 히스토리 응답 형식이 올바르지 않습니다.');
+  }
+  return {
+    roomId: normalizeIdValue(raw.roomId),
+    chattings: raw.chattings.map((chat) => ({
+      chatId: normalizeIdValue(chat.chatId),
+      content: chat.content,
+      isChatbot: chat.isChatbot,
+    })),
+  };
 }
 
 type CreateChatRoomStreamAccumulator = {
