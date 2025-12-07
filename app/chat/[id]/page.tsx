@@ -8,6 +8,7 @@ import { emitTempRoomTitle } from '@/app/_lib/chatEvents';
 import { AssistantMessageBubble, UserMessageBubble, ChatInputFooter } from '@/app/_components/chat';
 import { fetchChatHistory } from '@/app/_api/chat';
 import { transformServerMessage } from '@/app/_lib/storage';
+import LoadingDotMotions from '@/app/_components/LoadingDotMotions';
 
 export default function ChatDetailPage() {
   const params = useParams<{ id: string }>();
@@ -17,10 +18,12 @@ export default function ChatDetailPage() {
   );
   const [input, setInput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [pendingMessage, setPendingMessage] = useState<string>('');
   const [streamingAnswer, setStreamingAnswer] = useState('');
   const [isStreamingActive, setIsStreamingActive] = useState(false);
   const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
+  const [pendingFinalMessages, setPendingFinalMessages] = useState<ChatMessage[] | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const pendingMessageIdRef = useRef(0);
   const hasUpdatedUrlRef = useRef(false);
@@ -30,9 +33,14 @@ export default function ChatDetailPage() {
   const isNewChatRoute = params?.id === 'new';
   const isNewChat = !activeRoomId && isNewChatRoute;
 
-  const handleStreamingAnimationComplete = () => {
+  const handleStreamingAnimationComplete = useCallback(() => {
     setStreamingAnswer('');
-  };
+    setPendingMessage('');
+    if (pendingFinalMessages) {
+      setMessages(pendingFinalMessages);
+      setPendingFinalMessages(null);
+    }
+  }, [pendingFinalMessages]);
 
   // 사용자가 스크롤했는지 감지
   const handleScroll = () => {
@@ -59,6 +67,7 @@ export default function ChatDetailPage() {
       hasLoadedHistoryRef.current.add(params.id);
 
       const loadHistory = async () => {
+        setIsLoadingHistory(true);
         try {
           const response = await fetchChatHistory(params.id);
           if (response.chattings && response.chattings.length > 0) {
@@ -69,6 +78,8 @@ export default function ChatDetailPage() {
         } catch (error) {
           console.error('채팅 기록 불러오기 실패:', error);
           hasLoadedHistoryRef.current.delete(params.id);
+        } finally {
+          setIsLoadingHistory(false);
         }
       };
 
@@ -130,12 +141,9 @@ export default function ChatDetailPage() {
     });
 
     if (result.success && result.thread) {
-      const finalAssistantMessage = result.thread.messages[result.thread.messages.length - 1];
       setResolvedRoomId(result.thread.id);
-      setMessages(result.thread.messages);
-      setPendingMessage('');
       setIsStreamingActive(false);
-      setStreamingAnswer(finalAssistantMessage?.content ?? '');
+      setPendingFinalMessages(result.thread.messages);
       setIsProcessing(false);
       emitTempRoomTitle({ roomId: result.thread.id, title: undefined });
       hasUpdatedUrlRef.current = false;
@@ -193,18 +201,16 @@ export default function ChatDetailPage() {
         id: result.serverUserChatId || result.userMessage.id,
       };
 
-      // 메시지 배열에 추가
-      setMessages([...messages, finalUserMessage, result.assistantMessage]);
+      setPendingFinalMessages([...messages, finalUserMessage, result.assistantMessage]);
       setIsStreamingActive(false);
-      setStreamingAnswer(result.assistantMessage.content);
     } else {
       alert(`${getErrorMessage(result.error)}\n다시 시도해 주세요.`);
       setMessages(previousMessages);
       setStreamingAnswer('');
       setIsStreamingActive(false);
+      setPendingMessage('');
     }
 
-    setPendingMessage('');
     setIsProcessing(false);
   };
 
@@ -221,8 +227,24 @@ export default function ChatDetailPage() {
     }
   };
 
+  // 히스토리 로딩 중일 때
+  if (isLoadingHistory) {
+    return (
+      <main className='flex-1 p-4 flex items-center justify-center'>
+        <LoadingDotMotions variant='text' text='채팅을 불러오는 중...' />
+      </main>
+    );
+  }
+
   // 새 채팅이 아닌데 메시지가 없고 현재 처리 중이 아닐 때만 에러 표시
-  if (!isNewChat && messages.length === 0 && !isProcessing) {
+  if (
+    !isNewChat &&
+    messages.length === 0 &&
+    !isProcessing &&
+    !pendingMessage &&
+    !streamingAnswer &&
+    !pendingFinalMessages
+  ) {
     return (
       <main className='flex-1 p-4 flex items-center justify-center text-sm text-black/60'>
         존재하지 않는 대화입니다.
