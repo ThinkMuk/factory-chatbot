@@ -1,5 +1,6 @@
 "use client";
 
+import { MAX_CHAT_ROOMS } from '@/app/constants';
 import type { ChatRoom } from "@/app/types";
 
 const STORAGE_KEY = "chatRooms";
@@ -14,7 +15,7 @@ function safeParse<T>(raw: string | null, fallback: T): T {
 
 export function saveChatRooms(rooms: ChatRoom[]): void {
   if (typeof window === "undefined") return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(rooms));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(rooms.slice(0, MAX_CHAT_ROOMS)));
 }
 
 export function loadChatRooms(): ChatRoom[] {

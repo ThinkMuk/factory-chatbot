@@ -2,7 +2,7 @@
 
 import type { ChatMessage, ChatThread } from "@/app/types";
 import { createChatRoom, sendMessage } from "@/app/_api/chat";
-import { addToChatRoomList, appendMessage, replaceMessageId, upsertThread } from "@/app/_lib/storage";
+import { addToChatRoomList } from "@/app/_lib/storage";
 import { getErrorMessage, isTimeoutError } from "@/app/_api/errors";
 import { formatKoreanDate } from "@/app/_lib/dateUtils";
 import { joinRoomNameChunks } from "@/app/_lib/roomNameUtils";
@@ -19,7 +19,9 @@ export type CreateNewChatResult = {
 
 export type SendMessageResult = {
   success: boolean;
-  updatedThread?: ChatThread;
+  userMessage?: ChatMessage;
+  assistantMessage?: ChatMessage;
+  serverUserChatId?: string;
   error?: unknown;
 };
 
@@ -61,14 +63,12 @@ export async function createNewChatWithMessage(
 
     const newThread: ChatThread = {
       id: normalizedRoomId,
-      title: normalizedRoomName,
       createdAt: now,
       updatedAt: now + 1,
       messages: [userMessage, assistantMessage],
     };
 
-    // 스토리지에 저장
-    upsertThread(newThread);
+    // ChatRoom 목록에만 추가 (ChatThread는 로컬 저장 안 함)
     addToChatRoomList({
       roomId: normalizedRoomId,
       roomName: normalizedRoomName,
@@ -91,6 +91,7 @@ export async function createNewChatWithMessage(
 
 /*
  * 기존 채팅방에 메시지를 전송
+ * 로컬 저장 없이 메시지 객체만 반환
  */
 export async function sendMessageToExistingChat(
   roomId: string,
@@ -99,38 +100,32 @@ export async function sendMessageToExistingChat(
   handlers: AnswerStreamHandlers = {}
 ): Promise<SendMessageResult> {
   try {
-    // 사용자 메시지를 임시 ID로 먼저 추가
+    const now = Date.now();
+
+    // 사용자 메시지 (임시 ID 사용)
     const userMessage: ChatMessage = {
       id: tempMessageId,
       role: 'user',
       content,
-      createdAt: Date.now(),
+      createdAt: now,
     };
-
-    const updatedWithUser = appendMessage(roomId, userMessage);
-    if (!updatedWithUser) {
-      throw new Error('메시지를 추가할 수 없습니다. 화면을 새로고침해 주세요.');
-    }
 
     // API 호출
     const response = await sendMessage(roomId, content, handlers);
 
-    // 임시 ID를 서버에서 받은 ID로 교체
-    const updatedWithServerUserId = replaceMessageId(roomId, tempMessageId, response.userChatId);
-
-    // 어시스턴트 응답 추가
+    // 어시스턴트 응답 메시지
     const assistantMessage: ChatMessage = {
       id: response.llmChatId || crypto.randomUUID(),
       role: 'assistant',
       content: response.answer,
-      createdAt: Date.now(),
+      createdAt: now + 1,
     };
-
-    const updatedWithAssistant = appendMessage(roomId, assistantMessage);
 
     return {
       success: true,
-      updatedThread: updatedWithAssistant || updatedWithServerUserId,
+      userMessage,
+      assistantMessage,
+      serverUserChatId: response.userChatId,
     };
   } catch (error) {
     console.error('메시지 전송 실패:', error);

@@ -1,105 +1,7 @@
 "use client";
 
 import { loadChatRooms, saveChatRooms } from '@/app/_lib/chatRoomsStorage';
-import { ChatRoom, ChatThread, ChatMessage, NewThreadPayload } from '@/app/types';
-
-const STORAGE_KEY = "factory-chatbot.threads";
-
-function safeParse<T>(raw: string | null, fallback: T): T {
-  try {
-    return raw ? (JSON.parse(raw) as T) : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-export function getThreads(): ChatThread[] {
-  if (typeof window === "undefined") return [];
-  return safeParse<ChatThread[]>(localStorage.getItem(STORAGE_KEY), []);
-}
-
-export function saveThreads(threads: ChatThread[]) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(threads));
-}
-
-export function createThread(payload: NewThreadPayload): ChatThread {
-  const now = Date.now();
-  const newThread: ChatThread = {
-    id: crypto.randomUUID(),
-    title: payload.title.trim() || "새 채팅",
-    createdAt: now,
-    updatedAt: now,
-    messages: [],
-  };
-  const threads = getThreads();
-  threads.unshift(newThread);
-  saveThreads(threads);
-  return newThread;
-}
-
-export function deleteThread(threadId: string) {
-  const threads = getThreads().filter((t) => t.id !== threadId);
-  saveThreads(threads);
-}
-
-export function getThread(threadId: string): ChatThread | undefined {
-  return getThreads().find((t) => t.id === threadId);
-}
-
-export function appendMessage(
-  threadId: string,
-  message: Omit<ChatMessage, "id" | "createdAt"> & Partial<Pick<ChatMessage, "id" | "createdAt">>
-): ChatThread | undefined {
-  const threads = getThreads();
-  const idx = threads.findIndex((t) => t.id === threadId);
-  if (idx === -1) return undefined;
-  const now = Date.now();
-  const fullMsg: ChatMessage = {
-    id: message.id ?? crypto.randomUUID(),
-    createdAt: message.createdAt ?? now,
-    role: message.role,
-    content: message.content,
-  };
-  const updated: ChatThread = {
-    ...threads[idx],
-    updatedAt: now,
-    messages: [...threads[idx].messages, fullMsg],
-  };
-  threads[idx] = updated;
-  saveThreads(threads);
-  return updated;
-}
-
-export function replaceMessageId(threadId: string, oldId: string, newId: string): ChatThread | undefined {
-  if (!newId) return undefined;
-  const threads = getThreads();
-  const threadIndex = threads.findIndex((t) => t.id === threadId);
-  if (threadIndex === -1) return undefined;
-  const messageIndex = threads[threadIndex].messages.findIndex((m) => m.id === oldId);
-  if (messageIndex === -1) return undefined;
-  const messages = threads[threadIndex].messages.map((message, idx) =>
-    idx === messageIndex ? { ...message, id: newId } : message
-  );
-  const updated: ChatThread = {
-    ...threads[threadIndex],
-    messages,
-  };
-  threads[threadIndex] = updated;
-  saveThreads(threads);
-  return updated;
-}
-
-export function upsertThread(thread: ChatThread) {
-  const threads = getThreads();
-  const idx = threads.findIndex((t) => t.id === thread.id);
-  if (idx === -1) {
-    threads.unshift(thread);
-  } else {
-    threads[idx] = thread;
-  }
-  saveThreads(threads);
-}
+import { ChatRoom, ChatThread, ChatMessage, ServerChatMessage } from '@/app/types';
 
 type MinimalChatRoom = Pick<ChatRoom, 'roomId' | 'roomName' | 'date'>;
 
@@ -107,6 +9,31 @@ export function addToChatRoomList(newRoom: MinimalChatRoom) {
   const existing = loadChatRooms();
   const next = [newRoom, ...existing.filter((room) => room.roomId !== newRoom.roomId)];
   saveChatRooms(next);
+}
+
+export function transformServerMessage(serverMessage: ServerChatMessage, index: number = 0): ChatMessage {
+  return {
+    id: serverMessage.chatId,
+    role: serverMessage.isChatbot ? "assistant" : "user",
+    content: serverMessage.content,
+    createdAt: Date.now() + index, // 서버에서 createdAt을 제공하지 않으므로 현재 시간 사용, 순서 유지를 위해 index 추가
+  };
+}
+
+export function createThreadWithMessages(threadId: string, serverMessages: ServerChatMessage[]): ChatThread {
+  const now = Date.now();
+  // 서버에서 최신 메시지가 먼저 오므로 reverse()로 오래된 메시지부터 정렬
+  const clientMessages = serverMessages.reverse().map((msg, index) => transformServerMessage(msg, index));
+
+  const newThread: ChatThread = {
+    id: threadId,
+    createdAt: now,
+    updatedAt: now,
+    messages: clientMessages,
+  };
+
+  // 로컬에 저장하지 않고 반환만
+  return newThread;
 }
 
 
