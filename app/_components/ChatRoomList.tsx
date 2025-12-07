@@ -7,6 +7,7 @@ import { deleteChatRoom as deleteChatRoomApi } from "@/app/_api/chat";
 import { useChatRoomList } from "@/app/_hooks/useChatRoomList";
 import { joinRoomNameChunks } from "@/app/_lib/roomNameUtils";
 import ThreadListItem from "@/app/_components/ThreadListItem";
+import LoadingDotMotions from "@/app/_components/LoadingDotMotions";
 
 type ChatRoomListProps = {
   onRoomClick?: (room: ChatRoom) => void;
@@ -16,7 +17,7 @@ type ChatRoomListProps = {
 export default function ChatRoomList({ onRoomClick, useLink = false }: ChatRoomListProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const { rooms, isLoading, loadMore, refresh, setCachedThreads } = useChatRoomList();
+  const { rooms, isLoading, isLoadingMore, loadMore, refresh, setCachedThreads } = useChatRoomList();
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const [deletingRoomId, setDeletingRoomId] = useState<string | null>(null);
 
@@ -88,29 +89,36 @@ export default function ChatRoomList({ onRoomClick, useLink = false }: ChatRoomL
         {!hasRooms ? (
           <div className='h-full flex items-center justify-center'>
             {isLoading ? (
-              <div className='text-sm text-black/60'>불러오는 중...</div>
+              <LoadingDotMotions variant="text" text="불러오는 중..." />
             ) : (
               <div className='text-sm text-black/60'>표시할 채팅방이 없습니다.</div>
             )}
           </div>
         ) : (
-          <ul className='space-y-2'>
-            {uniqueRooms.map((room) => {
-              const normalizedRoomName = joinRoomNameChunks(room.roomName) || "새 채팅";
-              return (
-                <ThreadListItem
-                  key={room.roomId}
-                  id={room.roomId}
-                  title={normalizedRoomName}
-                  subtitle={room.date}
-                  href={useLink ? `/chat/${room.roomId}` : undefined}
-                  onClick={!useLink ? () => (onRoomClick ? onRoomClick(room) : console.log("room click", room)) : undefined}
-                  onDelete={handleDeleteChatRoom}
-                  isDeleting={deletingRoomId === room.roomId}
-                />
-              );
-            })}
-          </ul>
+          <>
+            <ul className='space-y-2'>
+              {uniqueRooms.map((room) => {
+                const normalizedRoomName = joinRoomNameChunks(room.roomName) || "새 채팅";
+                return (
+                  <ThreadListItem
+                    key={room.roomId}
+                    id={room.roomId}
+                    title={normalizedRoomName}
+                    subtitle={room.date}
+                    href={useLink ? `/chat/${room.roomId}` : undefined}
+                    onClick={!useLink ? () => (onRoomClick ? onRoomClick(room) : console.log("room click", room)) : undefined}
+                    onDelete={handleDeleteChatRoom}
+                    isDeleting={deletingRoomId === room.roomId}
+                  />
+                );
+              })}
+            </ul>
+            {isLoadingMore && (
+              <div className='py-4 flex justify-center'>
+                <LoadingDotMotions />
+              </div>
+            )}
+          </>
         )}
         <div ref={sentinelRef} className='h-8' />
       </div>

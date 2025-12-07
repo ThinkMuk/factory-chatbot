@@ -8,6 +8,7 @@ import { clearChatRooms, loadChatRooms, saveChatRooms } from "@/app/_lib/chatRoo
 type UseChatRoomListReturn = {
   rooms: ChatRoom[];
   isLoading: boolean;
+  isLoadingMore: boolean;
   hasMore: boolean;
   loadMore: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -17,6 +18,7 @@ type UseChatRoomListReturn = {
 export function useChatRoomList(): UseChatRoomListReturn {
   const [rooms, setRooms] = useState<ChatRoom[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const isMountedRef = useRef(true);
 
@@ -69,7 +71,7 @@ export function useChatRoomList(): UseChatRoomListReturn {
   }, [loadFromLocal, saveToLocal]);
 
   const loadMore = useCallback(async () => {
-    if (isLoading || !hasMore) return;
+    if (isLoading || isLoadingMore || !hasMore) return;
     if (rooms.length === 0) {
       // 아직 방이 없으면 초기화 로직으로 대체 실행
       await initChatRoomList();
@@ -78,7 +80,7 @@ export function useChatRoomList(): UseChatRoomListReturn {
     // 무한스크롤은 과거 방향으로 불러오기 (목록의 마지막 roomId 사용)
     const oldestRoomId = rooms[rooms.length - 1]?.roomId;
     if (!oldestRoomId) return;
-    setIsLoading(true);
+    setIsLoadingMore(true);
     try {
       const res = await fetchChatRooms({
         lastRoomId: oldestRoomId,
@@ -98,9 +100,9 @@ export function useChatRoomList(): UseChatRoomListReturn {
       console.error(err);
       alert("더 불러오기에 실패했습니다. 네트워크 상태를 확인해주세요.");
     } finally {
-      if (isMountedRef.current) setIsLoading(false);
+      if (isMountedRef.current) setIsLoadingMore(false);
     }
-  }, [hasMore, initChatRoomList, isLoading, rooms, saveToLocal]);
+  }, [hasMore, initChatRoomList, isLoading, isLoadingMore, rooms, saveToLocal]);
 
   const refresh = useCallback(async () => {
     if (isLoading) return;
@@ -134,12 +136,13 @@ export function useChatRoomList(): UseChatRoomListReturn {
     () => ({
       rooms,
       isLoading,
+      isLoadingMore,
       hasMore,
       loadMore,
       refresh,
       setCachedThreads,
     }),
-    [rooms, isLoading, hasMore, loadMore, refresh, setCachedThreads]
+    [rooms, isLoading, isLoadingMore, hasMore, loadMore, refresh, setCachedThreads]
   );
 }
 
