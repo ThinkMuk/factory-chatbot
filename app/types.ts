@@ -7,14 +7,9 @@ export type ChatMessage = {
 
 export type ChatThread = {
   id: string;
-  title: string;
   createdAt: number;
   updatedAt: number;
   messages: ChatMessage[];
-};
-
-export type NewThreadPayload = {
-  title: string;
 };
 
 // --- Chat Room Types ---
@@ -42,6 +37,18 @@ export interface SendMessageResponse {
   userChatId: string;
   llmChatId: string;
   answer: string;
+}
+
+// --- Server Chat Message Type ---
+export interface ServerChatMessage {
+  chatId: string;
+  content: string;
+  isChatbot: boolean;
+}
+
+export interface ChatHistoryResponse {
+  roomId: string;
+  chattings: ServerChatMessage[];
 }
 
 
