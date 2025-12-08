@@ -27,8 +27,8 @@ export default function RootLayout({
   return (
     <html lang='en'>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <div className='min-h-screen flex items-center justify-center'>
-          <div className='relative w-full max-w-[375px] h-[100dvh] bg-[#E8EDF4] text-foreground overflow-hidden flex flex-col'>
+        <div className='min-h-[100dvh] w-full flex justify-center items-start md:items-center'>
+          <div className='relative w-full max-w-[430px] h-[100dvh] bg-[#E8EDF4] text-foreground overflow-hidden flex flex-col'>
             <Header />
             <div className='flex-1 min-h-0'>{children}</div>
             <FloatingDashboardButton />

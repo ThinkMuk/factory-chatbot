@@ -33,7 +33,7 @@ export default function CommonModal({
 
   return createPortal(
     <div
-      className='fixed inset-0 z-[9999] bg-black/50 w-screen h-screen flex items-center justify-center'
+      className='fixed inset-0 z-[9999] bg-black/50 w-full min-h-[100dvh] flex items-center justify-center px-4'
       role='dialog'
       aria-modal='true'
       aria-labelledby='common-modal-title'
