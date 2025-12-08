@@ -90,7 +90,10 @@ export default function ChatDetailPage() {
   // 자동 스크롤
   useEffect(() => {
     if (autoScrollEnabled) {
-      listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
+      // DOM 렌더링 완료 후 스크롤 실행
+      requestAnimationFrame(() => {
+        listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
+      });
     }
   }, [messages.length, pendingMessage, isProcessing, streamingAnswer, autoScrollEnabled]);
 
