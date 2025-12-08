@@ -5,6 +5,27 @@ import { MessagesSquare, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import CommonModal from './CommonModal';
 
+const UPDATED_AT_FORMATTER = new Intl.DateTimeFormat('ko-KR', {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+  timeZone: 'Asia/Seoul',
+});
+
+function formatUpdatedAt(timestamp?: number) {
+  if (!timestamp) {
+    return '';
+  }
+  try {
+    return UPDATED_AT_FORMATTER.format(new Date(timestamp));
+  } catch {
+    return '';
+  }
+}
+
 export type ThreadListItemProps = {
   id: string;
   title: string;
@@ -35,8 +56,8 @@ export default function ThreadListItem({
     if (onClick) return undefined;
     return `/chat/${id}`;
   }, [href, id, onClick]);
-
-  const secondaryText = subtitle ?? (updatedAt ? new Date(updatedAt).toLocaleString() : '');
+  const formattedUpdatedAt = useMemo(() => formatUpdatedAt(updatedAt), [updatedAt]);
+  const secondaryText = subtitle ?? formattedUpdatedAt;
   const showDeleteButton = !hideDeleteButton;
   const hasDelete = typeof onDelete === 'function';
   const interactiveClass = 'min-w-0 flex-1 flex items-center gap-4';
