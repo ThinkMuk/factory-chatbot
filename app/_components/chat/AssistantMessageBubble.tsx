@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import LoadingDotMotions from '@/app/_components/LoadingDotMotions';
 
 type AssistantMessageBubbleProps = {
@@ -19,6 +19,11 @@ const ANIMATION_CONFIG = {
   FINALIZING_DURATION: 0.05,
 } as const;
 
+type TextSegment = {
+  text: string;
+  shouldAnimate: boolean;
+};
+
 export default function AssistantMessageBubble({
   content,
   isLoading = false,
@@ -28,6 +33,7 @@ export default function AssistantMessageBubble({
 }: AssistantMessageBubbleProps) {
   const [displayedLength, setDisplayedLength] = useState(0);
   const [shouldAnimate, setShouldAnimate] = useState(isStreaming);
+  const [prevDisplayedLength, setPrevDisplayedLength] = useState(0);
   const textContent = content ?? '';
 
   useEffect(() => {
@@ -56,6 +62,7 @@ export default function AssistantMessageBubble({
 
     const delay = isStreaming ? ANIMATION_CONFIG.STREAMING_DELAY_MS : ANIMATION_CONFIG.FINALIZING_DELAY_MS;
     const timer = setTimeout(() => {
+      setPrevDisplayedLength(displayedLength);
       setDisplayedLength((prev) => Math.min(prev + 1, textContent.length));
     }, delay);
 
@@ -71,8 +78,25 @@ export default function AssistantMessageBubble({
 
   // 표시할 텍스트만 추출
   const isTyping = shouldAnimate && displayedLength < textContent.length;
-  const displayedText = isTyping ? textContent.slice(0, displayedLength) : textContent;
-  const displayLines = displayedText.split('\n');
+
+  // 고정된 부분과 새로운 글자 분리
+  const segments = useMemo<TextSegment[]>(() => {
+    if (!isTyping) {
+      return [{ text: textContent.slice(0, displayedLength), shouldAnimate: false }];
+    }
+
+    const fixedText = textContent.slice(0, prevDisplayedLength);
+    const newChar = textContent.slice(prevDisplayedLength, displayedLength);
+
+    const result: TextSegment[] = [];
+    if (fixedText) {
+      result.push({ text: fixedText, shouldAnimate: false });
+    }
+    if (newChar) {
+      result.push({ text: newChar, shouldAnimate: true });
+    }
+    return result;
+  }, [isTyping, textContent, prevDisplayedLength, displayedLength]);
 
   return (
     <div className='text-left'>
@@ -80,29 +104,26 @@ export default function AssistantMessageBubble({
         {isLoading ? (
           <LoadingDotMotions size="md" className="py-1" />
         ) : (
-          <div>
-            {displayLines.map((line, lineIndex) => (
-              <p key={lineIndex}>
-                {isTyping
-                  ? line.split('').map((char, charIndex) => (
-                      <motion.span
-                        key={`${lineIndex}-${charIndex}`}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{
-                          duration: isStreaming
-                            ? ANIMATION_CONFIG.STREAMING_DURATION
-                            : ANIMATION_CONFIG.FINALIZING_DURATION,
-                          delay: 0,
-                          ease: 'easeOut',
-                        }}
-                      >
-                        {char}
-                      </motion.span>
-                    ))
-                  : line}
-              </p>
-            ))}
+          <div className="whitespace-pre-wrap">
+            {segments.map((segment, segmentIndex) =>
+              segment.shouldAnimate ? (
+                <motion.span
+                  key={`anim-${segmentIndex}-${prevDisplayedLength}`}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{
+                    duration: isStreaming
+                      ? ANIMATION_CONFIG.STREAMING_DURATION
+                      : ANIMATION_CONFIG.FINALIZING_DURATION,
+                    ease: 'easeOut',
+                  }}
+                >
+                  {segment.text}
+                </motion.span>
+              ) : (
+                <span key={`fixed-${segmentIndex}`}>{segment.text}</span>
+              )
+            )}
           </div>
         )}
       </div>
