@@ -33,7 +33,7 @@ export default function ChatInputFooter({
           onKeyDown={handleKeyDown}
           placeholder='메시지를 입력하세요'
           disabled={isProcessing}
-          className='flex-1 h-[110px] border bg-[#FAFBFD] border-[#DCDCDC] rounded-2xl p-3 text-sm outline-none focus:ring-1 focus:ring-[#d0cfcf] resize-none disabled:opacity-75 disabled:cursor-not-allowed'
+          className='flex-1 h-[110px] border bg-[#FAFBFD] border-[#DCDCDC] rounded-2xl p-3 text-base leading-5 outline-none focus:ring-1 focus:ring-[#d0cfcf] resize-none disabled:opacity-75 disabled:cursor-not-allowed'
         />
         <button
           onClick={onSendMessage}
