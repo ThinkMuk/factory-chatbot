@@ -70,7 +70,7 @@ export default function Header() {
     <header className='h-12 flex items-center bg-[#323233] justify-between border-b border-black/10 px-4'>
       <div className='w-10'>
         {canGoBack ? (
-          <button className='text-sm text-white cursor-pointer' onClick={() => router.back()}>
+          <button className='text-sm text-white cursor-pointer' onClick={() => router.push('/')}>
             <Undo2 className='w-[18px] h-[18px]' />
           </button>
         ) : null}
