@@ -5,7 +5,11 @@ export default function FloatingDashboardButton() {
   return (
     <button
       onClick={() => {
-        window.open('https://dashboard-inha2025-ews.education.wise-paas.com/?orgId=5', '_blank', 'noopener,noreferrer');
+        window.open(
+          'https://dashboard-inha2025-ews.education.wise-paas.com/d/2bFMjDWvk/ems?orgId=5',
+          '_blank',
+          'noopener,noreferrer'
+        );
       }}
       className='w-full h-[68px] bg-[#FAFBFD] border-t cursor-pointer rounded-t-4xl border-black/10 hover:bg-[#e8f0fa] transition-colors duration-200'
     >
