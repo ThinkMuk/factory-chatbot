@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import Header from './_components/Header';
 import FloatingDashboardButton from './_components/FloatingDashboardButton';
@@ -14,6 +15,13 @@ const geistMono = Geist_Mono({
   subsets: ['latin'],
 });
 
+const pretendard = localFont({
+  src: '../public/fonts/pretendard/PretendardVariable.woff2',
+  display: 'swap',
+  weight: '45 920',
+  variable: '--font-pretendard',
+});
+
 export const metadata: Metadata = {
   title: 'Factory Chatbot',
   description: 'Factory Chatbot',
@@ -26,7 +34,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang='en'>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      <body className={`${pretendard.variable} ${geistSans.variable} ${geistMono.variable} antialiased`}>
         <div className='min-h-[100dvh] w-full flex justify-center items-start md:items-center'>
           <div className='relative w-full max-w-[430px] h-[100dvh] bg-[#E8EDF4] text-foreground overflow-hidden flex flex-col'>
             <Header />
