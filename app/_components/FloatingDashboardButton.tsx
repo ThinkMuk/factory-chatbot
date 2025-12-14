@@ -6,7 +6,7 @@ export default function FloatingDashboardButton() {
     <button
       onClick={() => {
         window.open(
-          'https://dashboard-inha2025-ews.education.wise-paas.com/d/Qyv7AvGDz/sankey?orgId=5&from=1742396400000&to=1745419800000',
+          'https://dashboard-inha2025-ews.education.wise-paas.com/d/Qyv7AvGDz/sankey?orgId=5',
           '_blank',
           'noopener,noreferrer'
         );
