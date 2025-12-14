@@ -11,7 +11,7 @@ export default function Home() {
       </main>
       <Link
         href='/chat/new'
-        className='absolute bottom-5 left-4 w-[50px] h-[50px] rounded-full bg-[#194268] text-white flex items-center justify-center text-2xl shadow-lg'
+        className='absolute bottom-5 left-4 w-[50px] h-[50px] rounded-full bg-[#194268] text-white flex items-center justify-center text-3xl shadow-lg pb-1'
         aria-label='새 채팅 시작'
       >
         +
