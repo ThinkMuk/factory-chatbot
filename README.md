@@ -7,6 +7,10 @@ LLM과 MCP(Model Context Protocol)를 결합하여 자연어 기반 에너지 �
 SSE(Server-Sent Events) 스트리밍으로 실시간 응답을 제공하며,
 분위수 기반 예측으로 불확실성 구간까지 시각화하여 데이터 기반 의사결정을 지원합니다.
 
+## 수상
+
+🏆 **2025 Advantech AIoT Innoworks Project** 우수상 (3등)
+
 ## 시스템 아키텍처
 
 <img width="948" height="581" alt="프로젝트 아키텍쳐" src="https://github.com/user-attachments/assets/67fef7a4-ee1f-42db-8adf-74798eed70af" />
