@@ -70,6 +70,11 @@ const response = await createChatRoom(question, {
 });
 ```
 
+#### 비교 예시: 전체 응답 완료 후 → 스트리밍 즉시 표시
+
+![SSE 비교 gif](https://github.com/user-attachments/assets/5ce7b12d-55fc-4ee4-912c-9ef30a92acac)
+
+
 ### API 레이어 분리
 
 관심사 분리 원칙에 따라 `_api/` 디렉토리에서 통신 로직을 분리:
