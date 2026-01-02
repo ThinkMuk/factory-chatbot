@@ -97,12 +97,24 @@ UI 로직과 비즈니스 로직을 분리하여 재사용성과 테스트 용�
 
 ```typescript
 function normalizeIdValue(value: unknown): string {
-  if (typeof value === 'bigint') return value.toString();
-  if (typeof value === 'string') {
-    try { return BigInt(value).toString(); } 
-    catch { return value; }
+  if (typeof value === 'bigint') {
+    return value.toString();
   }
-  return String(value);
+  if (typeof value === 'string') {
+    try {
+      return BigInt(value).toString();
+    } catch {
+      return value;
+    }
+  }
+  if (typeof value === 'number') {
+    try {
+      return BigInt(value).toString();
+    } catch {
+      return String(value);
+    }
+  }
+  return '';
 }
 ```
 
