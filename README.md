@@ -93,7 +93,7 @@ UI 로직과 비즈니스 로직을 분리하여 재사용성과 테스트 용�
 
 ### 타입 안전성
 
-BigInt ID의 정밀도 손실 방지를 위한 문자열 정규화:
+대형 정수 ID의 JSON 파싱 시 JavaScript Number 정밀도 손실 방지를 위한 문자열 정규화:
 
 ```typescript
 function normalizeIdValue(value: unknown): string {
